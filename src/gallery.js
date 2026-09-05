@@ -1,9 +1,15 @@
 import * as THREE from 'three';
-import { gallerySlots } from './projects.js';
+import { gallerySlots, projects } from './projects.js';
+import { createArtwork, studyNames } from './artwork.js';
+
+// Recycle only outside the visible stage, equally in either scroll direction.
+export function wrapSpiralOffset(offset, span) {
+  return ((offset + span / 2) % span + span) % span - span / 2;
+}
 
 export const SPIRAL_LAYOUT = {
-  desktop: { radius: 2.65, pitch: 6.2, step: .82, width: 2.35, aspect: 1.6, count: 19, cameraZ: 11.6 },
-  mobile: { radius: 1.25, pitch: 5.8, step: .94, width: 1.6, aspect: 1.5, count: 13, cameraZ: 10.4 },
+  desktop: { radius: 3.05, pitch: 8.8, step: .9, width: 3.65, aspect: 1.6, count: 23, cameraZ: 11.8 },
+  mobile: { radius: 1.5, pitch: 7.8, step: .9, width: 2.6, aspect: 1.6, count: 23, cameraZ: 10.4 },
   fov: 43, damping: 10, wheelSpeed: .0017, dragSpeed: .007, pixelRatio: 1.75,
 };
 
@@ -13,15 +19,36 @@ export function mountGallery(host) {
   const state = { reveal: 0 };
   let renderer, config, cards = [], resources = [], frame = 0, last = 0;
   let enabled = false, disposed = false, current = 0, target = 0, pointer = null, pointerY = 0;
-  let dirty = true, previousReveal = -1;
+  let dirty = true, previousReveal = -1, listMode = false;
+  const artwork = studyNames.map((_, i) => createArtwork(i));
+  [...fallback.children].forEach((card, i) => { card.style.backgroundImage = `url(${artwork[i % artwork.length].toDataURL()})`; });
+  const shell = host.parentElement, list = shell.querySelector('.gallery-list');
+  const buttons = [...shell.querySelectorAll('[data-view]')];
+  const entries = projects.length ? projects : studyNames.map((title, i) => ({title, cover: artwork[i].toDataURL(), placeholder: true}));
+  entries.forEach((entry, i) => {
+    const row = document.createElement('div'); row.className = 'gallery-list-row';
+    const img = document.createElement('img'); img.src = entry.cover; img.alt = '';
+    const name = document.createElement('span'); name.textContent = entry.title;
+    const meta = document.createElement('small'); meta.textContent = entry.placeholder ? '视觉预览 / '+String(i+1).padStart(2,'0') : String(i+1).padStart(2,'0');
+    row.append(img, name, meta); list.append(row);
+  });
+  function switchView(event) {
+    listMode = event.currentTarget.dataset.view === 'list';
+    list.hidden = !listMode; host.style.visibility = listMode ? 'hidden' : 'visible';
+    buttons.forEach(button => button.setAttribute('aria-pressed', String((button.dataset.view === 'list') === listMode)));
+    up(); dirty = true; wake();
+  }
+  buttons.forEach(button => button.addEventListener('click', switchView));
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(SPIRAL_LAYOUT.fov, 1, .1, 100);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x333333, 2));
-  const light = new THREE.DirectionalLight(0xffffff, 2.3);
-  light.position.set(-3, 6, 8); scene.add(light);
-  const geometry = new THREE.PlaneGeometry(1, 1), edges = new THREE.EdgesGeometry(geometry);
-  const material = new THREE.MeshStandardMaterial({ color: 0x777875, roughness: .94, side: THREE.DoubleSide });
-  const lineMaterial = new THREE.LineBasicMaterial({ color: 0x989a95 });
+  const geometry = new THREE.PlaneGeometry(1, 1, 40, 12);
+  const positions = geometry.attributes.position;
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i), y = positions.getY(i);
+    positions.setZ(i, -.32 * x * x + .045 * Math.sin(x * Math.PI) * y);
+  }
+  geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+  const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, alphaTest: .05 });
   function fail() {
     canvas.hidden = true; fallback.hidden = false; enabled = false;
     cancelAnimationFrame(frame); frame = 0;
@@ -35,26 +62,31 @@ export function mountGallery(host) {
     cards.forEach(card => scene.remove(card));
     resources.forEach(resource => resource.dispose()); resources = [];
     const loader = new THREE.TextureLoader();
-    cards = gallerySlots(config.count).map(slot => {
+    const sequenceLength = projects.length || studyNames.length;
+    const poolSize = Math.ceil(config.count / sequenceLength) * sequenceLength;
+    cards = gallerySlots(poolSize).map(slot => {
       const group = new THREE.Group();
-      let surface = material;
-      if (!slot.placeholder && slot.cover) {
-        surface = material.clone(); resources.push(surface);
-        const texture = loader.load(slot.cover, () => { dirty = true; wake(); });
-        texture.colorSpace = THREE.SRGBColorSpace; resources.push(texture); surface.map = texture;
-      }
-      group.add(new THREE.Mesh(geometry, surface), new THREE.LineSegments(edges, lineMaterial));
+      const surface = material.clone(); resources.push(surface);
+      const texture = slot.cover ? loader.load(slot.cover, () => { dirty = true; wake(); }, undefined, () => {
+        surface.map = new THREE.CanvasTexture(artwork[slot.study ?? 0]);
+        surface.map.colorSpace = THREE.SRGBColorSpace; resources.push(surface.map);
+        surface.needsUpdate = true; dirty = true; wake();
+      }) : new THREE.CanvasTexture(artwork[slot.study]);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = Math.min(8, renderer?.capabilities.getMaxAnisotropy() ?? 1);
+      resources.push(texture); surface.map = texture;
+      group.add(new THREE.Mesh(geometry, surface));
       group.userData = slot; scene.add(group); return group;
     });
   }
-  function limit() { return Math.max(0, (cards.length - 7) * config.step / 2); }
   function draw() {
     const spread = .78 + state.reveal * .22;
     cards.forEach((card, i) => {
-      const offset = (i - (cards.length - 1) / 2) * config.step + current;
-      const angle = offset + .4;
+      const offset = wrapSpiralOffset((i - (cards.length - 1) / 2) * config.step + current, cards.length * config.step);
+      const angle = offset;
       card.position.set(Math.sin(angle) * config.radius * spread, offset * config.pitch / (Math.PI * 2) * spread, Math.cos(angle) * config.radius);
-      card.rotation.set(0, angle, -.045);
+      card.rotation.set(.08 * Math.sin(angle), angle - .22 * Math.sin(angle), -.055 * Math.sin(angle));
+      card.children[0].material.color.setScalar(.7 + .3 * (Math.cos(angle) + 1) / 2);
       card.scale.set(config.width, config.width / config.aspect, 1);
     });
     renderer?.render(scene, camera);
@@ -66,6 +98,10 @@ export function mountGallery(host) {
     const moving = Math.abs(target - current) > .0001;
     if (moving) current = motion.matches ? target : THREE.MathUtils.damp(current, target, SPIRAL_LAYOUT.damping, dt);
     else current = target;
+    // Keep long sessions numerically stable without changing the easing distance.
+    const span = cards.length * config.step;
+    const cycles = Math.trunc(current / span);
+    if (cycles) { current -= cycles * span; target -= cycles * span; }
     if (dirty || moving || previousReveal !== state.reveal) draw();
     previousReveal = state.reveal; dirty = false;
     if (moving || state.reveal > 0 && state.reveal < 1) wake();
@@ -82,27 +118,26 @@ export function mountGallery(host) {
     camera.updateProjectionMatrix();
     renderer?.setPixelRatio(Math.min(devicePixelRatio, SPIRAL_LAYOUT.pixelRatio));
     renderer?.setSize(width, height, false);
-    target = THREE.MathUtils.clamp(target, -limit(), limit()); current = target;
     dirty = true; wake();
   }
-  function move(delta) { target = THREE.MathUtils.clamp(target + delta, -limit(), limit()); wake(); }
+  function move(delta) { target += delta; wake(); }
   function wheel(event) {
-    if (!enabled || event.ctrlKey) return;
+    if (!enabled || listMode || event.ctrlKey) return;
     event.preventDefault();
     const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
     move(THREE.MathUtils.clamp(pixels, -160, 160) * SPIRAL_LAYOUT.wheelSpeed);
   }
   function down(event) {
-    if (!enabled || event.pointerType === 'mouse' || !event.isPrimary) return;
-    pointer = event.pointerId; pointerY = event.clientY; host.setPointerCapture(pointer);
+    if (!enabled || listMode || event.button !== 0 || !event.isPrimary) return;
+    host.classList.add('is-dragging'); pointer = event.pointerId; pointerY = event.clientY; host.setPointerCapture(pointer);
   }
   function drag(event) {
     if (!enabled || event.pointerId !== pointer) return;
     move((pointerY - event.clientY) * SPIRAL_LAYOUT.dragSpeed); pointerY = event.clientY;
   }
-  function up() { if (pointer !== null && host.hasPointerCapture(pointer)) host.releasePointerCapture(pointer); pointer = null; }
+  function up() { host.classList.remove('is-dragging'); if (pointer !== null && host.hasPointerCapture(pointer)) host.releasePointerCapture(pointer); pointer = null; }
   function key(event) {
-    if (!enabled || !['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].includes(event.key)) return;
+    if (!enabled || listMode || !['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].includes(event.key)) return;
     event.preventDefault(); move(event.key.includes('Down') ? .5 : -.5);
   }
   function visibility() { cancelAnimationFrame(frame); frame = 0; last = 0; if (!document.hidden) { dirty = true; wake(); } }
@@ -123,7 +158,8 @@ export function mountGallery(host) {
       host.removeEventListener('pointermove', drag); host.removeEventListener('pointerup', up); host.removeEventListener('pointercancel', up);
       host.removeEventListener('keydown', key); canvas.removeEventListener('webglcontextlost', lost);
       window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange', visibility);
-      geometry.dispose(); edges.dispose(); material.dispose(); lineMaterial.dispose();
+      buttons.forEach(button => button.removeEventListener('click', switchView)); list.replaceChildren();
+      geometry.dispose(); material.dispose();
       resources.forEach(resource => resource.dispose()); renderer?.dispose();
     },
   };
