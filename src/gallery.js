@@ -8,10 +8,56 @@ export function wrapSpiralOffset(offset, span) {
 }
 
 export const SPIRAL_LAYOUT = {
-  desktop: { radius: 3.05, pitch: 8.8, step: .9, width: 3.65, aspect: 1.6, count: 23, cameraZ: 11.8 },
-  mobile: { radius: 1.5, pitch: 7.8, step: .9, width: 2.6, aspect: 1.6, count: 23, cameraZ: 10.4 },
+  desktop: { radius: 3.35, pitch: 14, step: 1, width: 3.35, aspect: 1.6, count: 23, cameraZ: 11.8 },
+  mobile: { radius: 1.65, pitch: 13, step: 1, width: 2.35, aspect: 1.6, count: 23, cameraZ: 10.4 },
   fov: 43, damping: 10, wheelSpeed: .0017, dragSpeed: .007, pixelRatio: 1.75,
+  focus: { clearAngle: .48, softAngle: 2.4, maxBlur: .018 },
 };
+
+// A fixed viewing zone: each card becomes sharp as it reaches the front center.
+export function spiralDefocus(offset) {
+  const { clearAngle, softAngle } = SPIRAL_LAYOUT.focus;
+  return THREE.MathUtils.smoothstep(Math.abs(offset), clearAngle, softAngle);
+}
+
+function applyFocus(surface, aspect) {
+  const blur = { value: 0 };
+  surface.userData.blur = blur;
+  surface.onBeforeCompile = shader => {
+    shader.uniforms.spiralBlur = blur;
+    shader.uniforms.spiralAspect = { value: aspect };
+    shader.fragmentShader = 'uniform float spiralBlur;\nuniform float spiralAspect;\n' + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+      #ifdef USE_MAP
+        vec4 sampledDiffuseColor = texture2D(map, vMapUv);
+        if (spiralBlur > 0.00001) {
+          vec4 blurred = vec4(0.0);
+          float total = 0.0;
+          // Gaussian sampling in card space preserves the curved silhouette.
+          for (int y = -2; y <= 2; y++) {
+            for (int x = -2; x <= 2; x++) {
+              vec2 tap = vec2(float(x), float(y));
+              float weight = exp(-dot(tap, tap) * 0.5);
+              vec2 uv = vMapUv + tap * spiralBlur * vec2(1.0, spiralAspect);
+              blurred += texture2D(map, clamp(uv, vec2(0.001), vec2(0.999)), 2.0 * spiralBlur / ${SPIRAL_LAYOUT.focus.maxBlur}) * weight;
+              total += weight;
+            }
+          }
+          sampledDiffuseColor = blurred / total;
+        }
+        diffuseColor *= sampledDiffuseColor;
+        // Rounded silhouette applies equally to artwork and uploaded covers.
+        vec2 halfSize = vec2(0.5, 0.5 / spiralAspect);
+        float radius = 0.065;
+        vec2 corner = abs((vMapUv - 0.5) * vec2(1.0, 1.0 / spiralAspect)) - halfSize + radius;
+        float edge = length(max(corner, 0.0)) + min(max(corner.x, corner.y), 0.0) - radius;
+        float aa = max(fwidth(edge), 0.0001);
+        diffuseColor.a *= 1.0 - smoothstep(-aa, aa, edge);
+      #endif
+    `);
+  };
+  surface.customProgramCacheKey = () => 'spiral-focus-rounded-v2';
+}
 
 export function mountGallery(host) {
   const canvas = host.querySelector('canvas'), fallback = host.querySelector('.gallery-fallback');
@@ -67,6 +113,7 @@ export function mountGallery(host) {
     cards = gallerySlots(poolSize).map(slot => {
       const group = new THREE.Group();
       const surface = material.clone(); resources.push(surface);
+      applyFocus(surface, config.aspect);
       const texture = slot.cover ? loader.load(slot.cover, () => { dirty = true; wake(); }, undefined, () => {
         surface.map = new THREE.CanvasTexture(artwork[slot.study ?? 0]);
         surface.map.colorSpace = THREE.SRGBColorSpace; resources.push(surface.map);
@@ -82,11 +129,14 @@ export function mountGallery(host) {
   function draw() {
     const spread = .78 + state.reveal * .22;
     cards.forEach((card, i) => {
-      const offset = wrapSpiralOffset((i - (cards.length - 1) / 2) * config.step + current, cards.length * config.step);
+      const offset = wrapSpiralOffset((i - Math.floor(cards.length / 2)) * config.step + current, cards.length * config.step);
       const angle = offset;
       card.position.set(Math.sin(angle) * config.radius * spread, offset * config.pitch / (Math.PI * 2) * spread, Math.cos(angle) * config.radius);
       card.rotation.set(.08 * Math.sin(angle), angle - .22 * Math.sin(angle), -.055 * Math.sin(angle));
-      card.children[0].material.color.setScalar(.7 + .3 * (Math.cos(angle) + 1) / 2);
+      const surface = card.children[0].material;
+      const defocus = spiralDefocus(offset);
+      surface.userData.blur.value = defocus * SPIRAL_LAYOUT.focus.maxBlur;
+      surface.color.setScalar(1 - .32 * defocus);
       card.scale.set(config.width, config.width / config.aspect, 1);
     });
     renderer?.render(scene, camera);
