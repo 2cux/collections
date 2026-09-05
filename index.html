@@ -83,20 +83,39 @@
       aria-labelledby="intro-title"
       aria-describedby="intro-subtitle"
     >
-      <div class="intro-frame">
-        <p class="intro-kicker" data-intro-copy="kicker"></p>
-        <div class="intro-heading" id="intro-title">
-          <span class="intro-line-mask"><span class="intro-line" data-intro-copy="greeting"></span></span>
-          <span class="intro-line-mask"><span class="intro-line intro-line-muted" data-intro-copy="focus"></span></span>
+      <div class="intro-stage">
+        <canvas id="intro-canvas" class="intro-canvas" aria-hidden="true"></canvas>
+        <div class="intro-fallback-orb" aria-hidden="true">
+          <span class="fallback-eye fallback-eye-left"></span>
+          <span class="fallback-eye fallback-eye-right"></span>
+          <span class="fallback-mouth"></span>
         </div>
-        <p class="intro-subtitle" id="intro-subtitle" data-intro-copy="subtitle"></p>
-        <button id="enter-site" class="intro-cta" type="button" aria-label="进入网站" aria-hidden="true" disabled>
-          <span data-intro-copy="action"></span>
-          <span class="intro-cta-arrow" aria-hidden="true">↗</span>
-        </button>
+
+        <div class="intro-frame">
+          <div class="intro-hero-text" id="intro-title">
+            <span class="intro-line-mask intro-hello-mask">
+              <span class="intro-line intro-hello" data-intro-copy="greeting"></span>
+            </span>
+            <span class="intro-line-mask intro-name-mask">
+              <span class="intro-line intro-name" data-intro-copy="name"></span>
+            </span>
+          </div>
+
+          <div class="intro-final-copy" id="intro-subtitle">
+            <p class="intro-final-kicker" data-intro-copy="finalKicker"></p>
+            <p class="intro-final-description" data-intro-copy="finalDescription"></p>
+          </div>
+
+          <button id="enter-site" class="intro-cta" type="button" aria-label="进入网站" aria-hidden="true" disabled>
+            <span data-intro-copy="action"></span>
+            <span class="intro-cta-arrow" aria-hidden="true">↗</span>
+          </button>
+        </div>
+
+        <div class="intro-orb-target" aria-hidden="true"></div>
+        <button id="skip-intro" class="intro-skip" type="button">skip intro</button>
+        <span class="intro-corner intro-corner-bottom" aria-hidden="true">CAO BO / 2026</span>
       </div>
-      <span class="intro-corner intro-corner-top" aria-hidden="true">01 / 01</span>
-      <span class="intro-corner intro-corner-bottom" aria-hidden="true">SCROLL TO EXPLORE</span>
     </section>
 
     <noscript>
