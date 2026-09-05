@@ -1,4 +1,5 @@
 import { gsap } from 'gsap';
+import { createTransition } from './transition.js';
 import * as THREE from 'three';
 
 export const INTRO_COPY = { greeting: 'hello!', name: "I'm caobo", finalDescription: '软件工程与 AI 的学习者，正在把问题拆开、验证，再重新组合。', action: 'enter' };
@@ -45,13 +46,14 @@ function createIntroScene(canvas, onLost) {
   return { resize, dispose() { canvas.removeEventListener('webglcontextlost',lost); geometry.dispose(); material.dispose(); texture.dispose(); renderer.dispose(); } };
 }
 
-export function mountIntro({intro,home,enterButton,homeNavigation,homeVisual,homeFocusTarget}) {
+export function mountIntro({intro,home,enterButton,homeNavigation,homeVisual,homeFocusTarget,gallery}) {
   if (!intro || !home || !enterButton) return () => {};
   const $ = selector => intro.querySelector(selector);
   const hello=$('.intro-hello'), name=$('.intro-name'), text=$('.intro-hero-text'), composition=$('.intro-composition');
   const graphic=$('.intro-graphic-position'), clip=$('.intro-graphic-clip'), pattern=$('.intro-graphic-colorway'), solid=$('.intro-graphic-solid');
   const orb=$('.intro-orb-target'), canvas=$('canvas');
   const copy=$('.intro-final-copy'), skip=$('#skip-intro');
+  const transition = createTransition({ intro, home, orb, copy, button: enterButton, gallery, onComplete: finish });
   const query=new URLSearchParams(location.search), freeze=query.get('intro-state');
   const forced=query.has('replay') || ['hello','name','final'].includes(freeze);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
@@ -66,7 +68,7 @@ export function mountIntro({intro,home,enterButton,homeNavigation,homeVisual,hom
   intro.querySelectorAll('[data-intro-copy]').forEach(el=>{ el.textContent=INTRO_COPY[el.dataset.introCopy] || ''; });
   function ensureScene() {
     if(attempted) return; attempted=true;
-    scene=query.has('no-webgl') ? null : createIntroScene(canvas,()=>{ intro.classList.add('is-webgl-fallback'); });
+    scene=query.has('no-webgl') ? null : createIntroScene(canvas,()=>{ intro.classList.add('is-webgl-fallback'); orb.classList.add('is-webgl-fallback'); });
     intro.classList.toggle('is-webgl-fallback',!scene);
   }
   function measure() {
@@ -96,15 +98,14 @@ export function mountIntro({intro,home,enterButton,homeNavigation,homeVisual,hom
   function enter() {
     if(!ready || entered || disposed) return;
     entered=true; enterButton.disabled=true;
-    gsap.set([home,homeNavigation,homeVisual].filter(Boolean),{autoAlpha:1,x:0,y:0});
-    if(reduceMotion()) finish(); else tl.play('exit');
+    tl?.pause();
+    transition.start(reduceMotion());
   }
   function finish() {
     intro.hidden=true; intro.setAttribute('aria-hidden','true');
     document.documentElement.classList.remove('is-intro-active'); home.removeAttribute('inert');
     gsap.set([home,homeNavigation,homeVisual].filter(Boolean),{autoAlpha:1,x:0,y:0});
     home.classList.add('is-ready'); homeFocusTarget?.focus({preventScroll:true}); write(enteredKey);
-    scene?.dispose(); scene=null;
   }
   function build() {
     tl?.kill(); ready=false;
@@ -137,12 +138,12 @@ export function mountIntro({intro,home,enterButton,homeNavigation,homeVisual,hom
       .to(copy,{autoAlpha:1,y:0,duration:t.copy},'>')
       .to(enterButton,{autoAlpha:1,y:0,duration:t.button},'>-=0.12')
       .to(skip,{autoAlpha:0,duration:.15},'<')
-      .addLabel('final').call(()=>finalReady(),[],'final').addPause('final')
-      .addLabel('exit','+=0.001').to(intro,{autoAlpha:0,duration:reduceMotion()?0:t.exit},'exit').call(finish);
+      .addLabel('final').call(()=>finalReady(),[],'final').addPause('final');
     intro.dataset.phase='playing';
   }
   function replay() {
     if(disposed) return;
+    transition.reset();
     entered=false; pendingSkip=false; intro.hidden=false; intro.removeAttribute('aria-hidden');
     document.documentElement.classList.add('is-intro-active'); home.setAttribute('inert','');
     if(!scene) attempted=false;
@@ -158,7 +159,13 @@ export function mountIntro({intro,home,enterButton,homeNavigation,homeVisual,hom
   }
   function onSkip(){if(!entered) showFinal(true);}
   function onKey(event) { if(!entered && event.key==='Escape') {event.preventDefault();onSkip();} }
-  function onMotion(){if(reduceMotion() && !entered) showFinal();}
+  function onMotion(){if(reduceMotion()) { if(!entered) showFinal(); else transition.reduce(); }}
+  let resumeIntro = false;
+  function onVisibility() {
+    if(document.hidden) { resumeIntro = !entered && !!tl?.isActive(); if(resumeIntro) tl.pause(); }
+    else if(resumeIntro) { resumeIntro = false; if(!entered) tl?.resume(); }
+  }
+  document.addEventListener('visibilitychange',onVisibility);
   enterButton.addEventListener('click',enter); skip.addEventListener('click',onSkip);
   document.addEventListener('keydown',onKey); window.addEventListener('resize',onResize); reduced.addEventListener('change',onMotion);
   const debug={replay,skip:onSkip};
@@ -171,7 +178,7 @@ export function mountIntro({intro,home,enterButton,homeNavigation,homeVisual,hom
       replayButton.addEventListener('click',replay); document.body.append(replayButton);
     }
   }
-  if(!forced && read(enteredKey)) {entered=true;finish();}
+  if(!forced && read(enteredKey)) {entered=true;ensureScene();transition.start(true,true);}
   else {
     intro.hidden=false; document.documentElement.classList.add('is-intro-active'); home.setAttribute('inert','');
     // Fonts must settle before calculating the actual shared text anchor.
@@ -184,8 +191,9 @@ export function mountIntro({intro,home,enterButton,homeNavigation,homeVisual,hom
     });
   }
   return () => {
-    disposed=true; cancelAnimationFrame(resizeFrame); tl?.kill(); scene?.dispose();
+    disposed=true; cancelAnimationFrame(resizeFrame); tl?.kill(); transition.dispose(); scene?.dispose();
     enterButton.removeEventListener('click',enter); skip.removeEventListener('click',onSkip);
+    document.removeEventListener('visibilitychange',onVisibility);
     document.removeEventListener('keydown',onKey); window.removeEventListener('resize',onResize); reduced.removeEventListener('change',onMotion);
     replayButton?.remove();
     if(window.__intro===debug) delete window.__intro;

@@ -305,3 +305,28 @@ a {
   padding: 2rem;
   color: var(--ink);
 }
+
+/* Full-screen spiral stage. The intro background remains the shared base. */
+body { overflow: hidden; }
+.gallery-shell { position: fixed; inset: 0; opacity: 0; }
+.gallery-grid { position: absolute; inset: 0; opacity: 0; background-image: linear-gradient(#ffffff06 1px,transparent 1px),linear-gradient(90deg,#ffffff06 1px,transparent 1px); background-size: 64px 64px; }
+.gallery-brand { position: absolute; z-index: 3; left: clamp(22px,3vw,48px); top: 24px; width: 48px; height: 48px; }
+.gallery-views { position: absolute; z-index: 3; top: 37px; left: 50%; transform: translateX(-50%); font-size: 15px; line-height: 22px; opacity: 0; }
+.gallery-stage { position: absolute; inset: 0; opacity: 0; touch-action: none; outline-offset: -5px; }
+.gallery-stage canvas { display: block; width: 100%; height: 100%; }
+.gallery-stage canvas[hidden], .gallery-fallback[hidden] { display: none; }
+.gallery-fallback { position: absolute; inset: 0; overflow: hidden; }
+.gallery-fallback i { position: absolute; left: 50%; top: 50%; width: min(34vw,300px); aspect-ratio: 1.6; background: #51524f; border: 1px solid #7b7c76; transform: translate(-50%,-50%) rotate(-5deg); }
+.gallery-fallback i:nth-child(1) { margin: -320px 0 0 -90px; }
+.gallery-fallback i:nth-child(2) { margin: -210px 0 0 120px; transform: translate(-50%,-50%) rotate(8deg) scale(.8); }
+.gallery-fallback i:nth-child(3) { margin: -110px 0 0 150px; }
+.gallery-fallback i:nth-child(4) { margin: 10px 0 0 20px; }
+.gallery-fallback i:nth-child(5) { margin: 120px 0 0 -150px; }
+.gallery-fallback i:nth-child(6) { margin: 230px 0 0 -110px; transform: translate(-50%,-50%) rotate(8deg) scale(.8); }
+.gallery-fallback i:nth-child(7) { margin: 340px 0 0 60px; }
+@media (max-width: 700px) {
+  .gallery-brand { top: 20px; left: 20px; width: 40px; height: 40px; }
+  .gallery-views { top: 29px; font-size: 14px; }
+  .gallery-grid { background-size: 44px 44px; }
+  .gallery-fallback { transform: scale(.8); }
+}
