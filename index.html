@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#11110f" />
+    <meta
+      name="description"
+      content="曹波的个人网站：软件工程与 AI 探索。"
+    />
+    <title>曹波 — 软件工程与 AI</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-width: 320px;
+        min-height: 100%;
+        background: #11110f;
+      }
+
+      #home {
+        opacity: 0;
+      }
+
+      #intro {
+        position: fixed;
+        z-index: 10;
+        inset: 0;
+        background: #11110f;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="home" class="home-shell" inert>
+      <nav class="site-nav" aria-label="主导航">
+        <a class="brand" href="#top" data-home-focus>曹波<span aria-hidden="true">/</span>CAO BO</a>
+        <div class="nav-links">
+          <a href="#about">关于</a>
+          <a href="#notes">笔记</a>
+          <a href="#contact">联系</a>
+        </div>
+      </nav>
+
+      <section id="top" class="hero-section" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">PERSONAL WEBSITE · 2026</p>
+          <h1 id="hero-title">把复杂的事，<br /><em>做得清楚。</em></h1>
+          <p class="hero-description">
+            软件工程与 AI 的学习者，正在把问题拆开、验证，再重新组合。
+          </p>
+          <a class="text-link" href="#about" data-home-focus>
+            了解更多 <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+
+        <div class="hero-index" aria-label="当前索引">
+          <span class="index-label">FOCUS</span>
+          <span class="index-number">01</span>
+          <span class="index-rule" aria-hidden="true"></span>
+          <span class="index-label">BUILD / LEARN / SHARE</span>
+        </div>
+      </section>
+
+      <section id="about" class="home-rail" aria-label="近期方向">
+        <span>01 / 当前方向</span>
+        <span>AI 系统 · 可靠产品 · 持续学习</span>
+      </section>
+
+      <section id="notes" class="home-rail" aria-label="笔记">
+        <span>02 / 笔记</span>
+        <span>把过程留下来，让下一次更快</span>
+      </section>
+
+      <section id="contact" class="home-rail" aria-label="联系">
+        <span>03 / 联系</span>
+        <span>保持开放，欢迎交流</span>
+      </section>
+    </main>
+
+    <section
+      id="intro"
+      class="intro-overlay"
+      aria-labelledby="intro-title"
+      aria-describedby="intro-subtitle"
+    >
+      <div class="intro-frame">
+        <p class="intro-kicker" data-intro-copy="kicker"></p>
+        <div class="intro-heading" id="intro-title">
+          <span class="intro-line-mask"><span class="intro-line" data-intro-copy="greeting"></span></span>
+          <span class="intro-line-mask"><span class="intro-line intro-line-muted" data-intro-copy="focus"></span></span>
+        </div>
+        <p class="intro-subtitle" id="intro-subtitle" data-intro-copy="subtitle"></p>
+        <button id="enter-site" class="intro-cta" type="button" aria-label="进入网站" aria-hidden="true" disabled>
+          <span data-intro-copy="action"></span>
+          <span class="intro-cta-arrow" aria-hidden="true">↗</span>
+        </button>
+      </div>
+      <span class="intro-corner intro-corner-top" aria-hidden="true">01 / 01</span>
+      <span class="intro-corner intro-corner-bottom" aria-hidden="true">SCROLL TO EXPLORE</span>
+    </section>
+
+    <noscript>
+      <style>
+        #intro { display: none; }
+        #home { opacity: 1; transform: none; }
+      </style>
+      <p class="no-script-message">请启用 JavaScript 以进入网站。</p>
+    </noscript>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
