@@ -8,168 +8,231 @@ export function wrapSpiralOffset(offset, span) {
 }
 
 export const SPIRAL_LAYOUT = {
-  desktop: { radius: 3.6, pitch: 8.8, step: 0.78, width: 3.2, aspect: 1.6, count: 25, cameraZ: 11.8 },
-  mobile: { radius: 2.12, pitch: 7.8, step: 0.78, width: 2.32, aspect: 1.6, count: 23, cameraZ: 9.6, cameraMin: 4.4, cameraMax: 14.2, targetShare: 0.78, landscapeShare: 0.72 },
-  fov: 43, damping: 10, wheelSpeed: .0017, dragSpeed: .007, pixelRatio: 1.75,
-  focus: { clearAngle: .08, softAngle: 1.45, screenSoftDistance: .9, speedForBlur: 1.8, maxBlur: .012 },
+  desktop: { radius: 3.7, pitch: 9.2, step: 0.76, width: 3.2, aspect: 1.6, count: 25, cameraShare: 0.29 },
+  mobile: { radius: 2.0, pitch: 7.6, step: 0.76, width: 2.3, aspect: 1.6, count: 23, targetShare: 0.76, cameraMin: 7.0, cameraMax: 12.5, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04 },
+  compactLandscape: { radius: 1.85, pitch: 7.2, step: 0.76, width: 2.3, aspect: 1.6, count: 23, targetShare: 0.66, cameraMin: 3.25, cameraMax: 7.8, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04 },
+  fov: 43, normalDamping: 10, snapDamping: 14, wheelSpeed: .0017, dragSpeed: .007, pixelRatio: 1.75,
+  focus: { minDistance: .15, maxDistance: 2.4, maxBlur: .005 },
 };
+
+// The calibration route is intentionally pinned to the previously accepted
+// mobile frame too. Normal mobile browsing uses the stage-three configuration
+// above, but calibration never inherits those visual changes.
+const CALIBRATION_MOBILE_LAYOUT = { radius: 2.12, pitch: 7.8, step: 0.78, width: 2.32, aspect: 1.6, count: 23, cameraMin: 4.4, cameraMax: 14.2, targetShare: 0.78, landscapeShare: 0.72, rootRotationZ: -0.05, rootOffsetX: -0.12, rootOffsetY: 0.05 };
+
+export const QUALITY_PRESETS = Object.freeze({
+  high: Object.freeze({ pixelRatio: 1.75, blurSamples: 9, motionBlur: true, anisotropy: 8 }),
+  medium: Object.freeze({ pixelRatio: 1.5, blurSamples: 9, motionBlur: false, anisotropy: 4 }),
+  low: Object.freeze({ pixelRatio: 1.25, blurSamples: 1, motionBlur: false, anisotropy: 2 }),
+});
 
 const SNAP_DELAY = 150;
 const SNAP_EPSILON = .0005;
-const HOVER_DRAG_THRESHOLD = 7;
-
-const QUALITY_PRESETS = Object.freeze({
-  high: Object.freeze({ pixelRatio: 1.75, blur: true, motionBlur: true, blurScale: 1, anisotropy: 8, maxTextureSize: 2048 }),
-  medium: Object.freeze({ pixelRatio: 1.5, blur: true, motionBlur: true, blurScale: .72, anisotropy: 4, maxTextureSize: 1536 }),
-  low: Object.freeze({ pixelRatio: 1.25, blur: false, motionBlur: false, blurScale: 0, anisotropy: 2, maxTextureSize: 1024 }),
-});
 
 function isCompactViewport(width, height) {
   const shortEdge = Math.min(width, height);
   return shortEdge < 700 || width < 900 && height >= width || height < 560 && width < 1000;
 }
 
-function nextLowerQuality(level) {
-  return level === 'high' ? 'medium' : level === 'medium' ? 'low' : 'low';
+function chooseQuality(width, height, dpr, isMobile, reducedMotion) {
+  const pixels = width * height * Math.max(1, dpr) ** 2;
+  if (pixels > 11_000_000) return 'low';
+  if (reducedMotion || isMobile || pixels > 5_500_000) return 'medium';
+  return 'high';
 }
 
-function initialQualityLevel(width, height, compact) {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const pixels = width * height * dpr * dpr;
-  if (pixels > 8500000 || dpr > 3 || compact && pixels > 4500000) return 'low';
-  if (pixels > 4500000 || dpr > 2 || compact && pixels > 2200000) return 'medium';
-  return 'high';
+function textureAspect(texture, fallback = 1.6) {
+  const image = texture?.image;
+  const width = image?.naturalWidth || image?.videoWidth || image?.width;
+  const height = image?.naturalHeight || image?.videoHeight || image?.height;
+  return width > 0 && height > 0 ? width / height : fallback;
 }
 
 export function normalizeSpiralAngle(angle) {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
+export function calculateSpiralTransform({ offset, radius, pitch, spread = 1 }) {
+  const angle = offset;
+  const wrappedAngle = normalizeSpiralAngle(angle);
+  return {
+    angle,
+    wrappedAngle,
+    position: {
+      x: Math.sin(angle) * radius * spread,
+      y: angle * pitch / (Math.PI * 2) * spread,
+      z: Math.cos(angle) * radius,
+    },
+    rotation: {
+      pitch: Math.sin(angle) * 0.025,
+      yaw: THREE.MathUtils.clamp(wrappedAngle * 0.28, -0.72, 0.72),
+      roll: -Math.sin(angle) * 0.055,
+    },
+  };
+}
+
+export function calculateCameraZ({ radius, cardWidth, viewportAspect, fov, targetScreenShare }) {
+  const halfFov = THREE.MathUtils.degToRad(fov / 2);
+  const safeAspect = Math.max(0.01, viewportAspect);
+  const safeShare = THREE.MathUtils.clamp(targetScreenShare, 0.01, 0.99);
+  const distanceFromFrontCard = cardWidth / (
+    2 * safeShare * Math.tan(halfFov) * safeAspect
+  );
+  return radius + distanceFromFrontCard;
+}
+
+export function applyCardTransform(card, transform, { width, aspect = 1.6, tiltX = 0, tiltY = 0, tiltZ = 0 }) {
+  const cardWidth = width;
+  const cardHeight = cardWidth / aspect;
+  card.position.set(transform.position.x, transform.position.y, transform.position.z);
+  card.rotation.set(transform.rotation.pitch + tiltX, transform.rotation.yaw + tiltY, transform.rotation.roll + tiltZ);
+  card.scale.set(cardWidth, cardHeight, 1);
+}
+
 // Kept as a small compatibility helper for callers that only need angular defocus.
 export function spiralDefocus(offset) {
-  const { clearAngle, softAngle } = SPIRAL_LAYOUT.focus;
-  return THREE.MathUtils.smoothstep(Math.abs(normalizeSpiralAngle(offset)), clearAngle, softAngle);
+  const { minDistance, maxDistance } = SPIRAL_LAYOUT.focus;
+  return THREE.MathUtils.smoothstep(Math.abs(normalizeSpiralAngle(offset)), minDistance, maxDistance);
 }
 
-function calculateFocusAmount({ angle, distance, screenDistance, speed, nearDistance, farDistance }) {
-  const wrappedAngle = Math.atan2(
-    Math.sin(angle),
-    Math.cos(angle)
-  );
-  const { clearAngle, softAngle, screenSoftDistance, speedForBlur } = SPIRAL_LAYOUT.focus;
-  const angularFocus = 1 - THREE.MathUtils.smoothstep(Math.abs(wrappedAngle), clearAngle, softAngle);
-  const distanceFocus = 1 - THREE.MathUtils.smoothstep(distance, nearDistance, farDistance);
-  const screenFocus = 1 - THREE.MathUtils.smoothstep(screenDistance, .06, screenSoftDistance);
-  const speedPenalty = THREE.MathUtils.clamp(speed / speedForBlur, 0, 1) * (1 - angularFocus) * .28;
-  return THREE.MathUtils.clamp(
-    angularFocus * .52 + distanceFocus * .23 + screenFocus * .25 - speedPenalty,
-    0,
-    1,
-  );
+export function calculateFocusAmount(offset, step) {
+  const normalizedDistance = Math.abs(offset) / Math.max(step, Number.EPSILON);
+  const { minDistance, maxDistance } = SPIRAL_LAYOUT.focus;
+  return 1 - THREE.MathUtils.smoothstep(normalizedDistance, minDistance, maxDistance);
 }
 
-function applyFocus(surface, aspect, quality) {
-  const blur = { value: 0 };
-  const motionDirection = new THREE.Vector2(1, 0);
-  const motionDirectionUniform = { value: motionDirection };
-  const motionAmount = { value: 0 };
-  surface.userData.blur = blur;
-  surface.userData.motionDirection = motionDirection;
-  surface.userData.motionAmount = motionAmount;
+function colorValue(value) {
+  try { return new THREE.Color(value); } catch { return new THREE.Color('#11110f'); }
+}
+
+function applyFocus(surface, cardData, quality) {
+  const uniforms = {
+    spiralBlur: { value: 0 },
+    spiralSourceAspect: { value: 1.6 },
+    spiralCardAspect: { value: cardData.aspect },
+    spiralFocal: { value: new THREE.Vector2(cardData.focalX, 1 - cardData.focalY) },
+    spiralFitContain: { value: cardData.fit === 'contain' ? 1 : 0 },
+    spiralBackgroundColor: { value: colorValue(cardData.backgroundColor) },
+    spiralMotionAmount: { value: 0 },
+    spiralMotionDirection: { value: new THREE.Vector2(0, 0) },
+    spiralBlurEnabled: { value: quality.blurSamples > 1 ? 1 : 0 },
+  };
+  surface.userData.blur = uniforms.spiralBlur;
+  surface.userData.shaderUniforms = uniforms;
   surface.onBeforeCompile = shader => {
-    shader.uniforms.spiralBlur = blur;
-    shader.uniforms.spiralAspect = { value: aspect };
-    shader.uniforms.spiralBlurEnabled = quality.blurEnabled;
-    shader.uniforms.spiralMotionDirection = motionDirectionUniform;
-    shader.uniforms.spiralMotionAmount = motionAmount;
-    shader.fragmentShader = 'uniform float spiralBlur;\nuniform float spiralAspect;\nuniform float spiralBlurEnabled;\nuniform vec2 spiralMotionDirection;\nuniform float spiralMotionAmount;\n' + shader.fragmentShader;
-    shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
-      #ifdef USE_MAP
-        vec2 cardUv = gl_FrontFacing ? vMapUv : vec2(1.0 - vMapUv.x, vMapUv.y);
-        vec4 sampledDiffuseColor;
-        if (spiralBlurEnabled > 0.5 && spiralBlur > 0.00001) {
+    Object.assign(shader.uniforms, uniforms);
+    const sampleBlock = quality.blurSamples > 1 ? `
+        if (spiralBlurEnabled > 0.5 && (spiralBlur > 0.00001 || spiralMotionAmount > 0.00001)) {
           vec4 blurred = vec4(0.0);
           float total = 0.0;
-          // A 3x3 kernel is enough for the restrained card-space softness.
-          // Motion rotates the kernel toward the projected spiral tangent.
-          vec2 axis = normalize(spiralMotionDirection);
-          vec2 side = vec2(-axis.y, axis.x);
+          // Fixed 3x3 kernel: static focus blur and speed blur share nine taps.
           for (int y = -1; y <= 1; y++) {
             for (int x = -1; x <= 1; x++) {
               vec2 gridTap = vec2(float(x), float(y));
-              vec2 directionalTap = axis * (gridTap.x * 1.55) + side * (gridTap.y * .72);
-              vec2 tap = mix(gridTap, directionalTap, spiralMotionAmount);
-              vec2 uv = cardUv + tap * spiralBlur * vec2(1.0, spiralAspect);
+              vec2 uv = cardUv + gridTap * spiralBlur * vec2(1.0, spiralCardAspect);
+              uv += spiralMotionDirection * spiralMotionAmount * 0.012 * float(x);
               float weight = (x == 0 && y == 0) ? 4.0 : (x == 0 || y == 0 ? 2.0 : 1.0);
-              blurred += texture2D(map, clamp(uv, vec2(0.001), vec2(0.999))) * weight;
+              blurred += sampleSpiralCard(uv) * weight;
               total += weight;
             }
           }
           sampledDiffuseColor = blurred / total;
         } else {
-          // The focused card takes one regular sample and no blur taps.
-          sampledDiffuseColor = texture2D(map, cardUv);
+          sampledDiffuseColor = sampleSpiralCard(cardUv);
+        }` : `
+        // Low quality keeps the exact same mapping with one texture sample.
+        sampledDiffuseColor = sampleSpiralCard(cardUv);`;
+    const customUniforms = `
+      uniform float spiralBlur;
+      uniform float spiralSourceAspect;
+      uniform float spiralCardAspect;
+      uniform vec2 spiralFocal;
+      uniform float spiralFitContain;
+      uniform vec3 spiralBackgroundColor;
+      uniform float spiralMotionAmount;
+      uniform vec2 spiralMotionDirection;
+      uniform float spiralBlurEnabled;
+    `;
+    const sampleHelper = `
+      vec4 sampleSpiralCard(vec2 cardUv) {
+        vec2 imageWindow = vec2(1.0);
+        vec2 inset = vec2(0.0);
+        if (spiralFitContain > 0.5) {
+          if (spiralSourceAspect > spiralCardAspect) imageWindow.y = spiralCardAspect / spiralSourceAspect;
+          else imageWindow.x = spiralSourceAspect / spiralCardAspect;
+          inset = (vec2(1.0) - imageWindow) * 0.5;
+          if (cardUv.x < inset.x || cardUv.x > inset.x + imageWindow.x || cardUv.y < inset.y || cardUv.y > inset.y + imageWindow.y) {
+            return vec4(spiralBackgroundColor, 1.0);
+          }
+          return texture2D(map, clamp((cardUv - inset) / imageWindow, vec2(0.001), vec2(0.999)));
         }
+        if (spiralSourceAspect > spiralCardAspect) imageWindow.x = spiralCardAspect / spiralSourceAspect;
+        else imageWindow.y = spiralSourceAspect / spiralCardAspect;
+        vec2 crop = vec2(1.0) - imageWindow;
+        return texture2D(map, clamp(spiralFocal * crop + cardUv * imageWindow, vec2(0.001), vec2(0.999)));
+      }
+    `;
+    // map_pars_fragment declares the built-in sampler. Insert the helper
+    // after that include so the custom function has a declared map uniform.
+    shader.fragmentShader = customUniforms + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace('#include <map_pars_fragment>', `#include <map_pars_fragment>\n${sampleHelper}`);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+      #ifdef USE_MAP
+        vec2 cardUv = vMapUv;
+        vec4 sampledDiffuseColor;
+        ${sampleBlock}
         diffuseColor *= sampledDiffuseColor;
-        // Rounded silhouette applies equally to artwork and uploaded covers.
-        // Normalize the UVs by the card width so portrait cards keep the same
-        // physical corner radius as landscape cards.
-        vec2 halfSize = vec2(0.5, 0.5 / spiralAspect);
+        // The SDF uses physical card coordinates, so portrait corners match
+        // landscape corners after the card's non-uniform scale.
+        vec2 physical = (cardUv - 0.5) * vec2(spiralCardAspect, 1.0);
+        vec2 halfSize = vec2(spiralCardAspect, 1.0) * 0.5 - 0.06;
         float radius = 0.06;
-        vec2 corner = abs((cardUv - 0.5) * vec2(1.0, 1.0 / spiralAspect)) - halfSize + radius;
+        vec2 corner = abs(physical) - halfSize;
         float edge = length(max(corner, 0.0)) + min(max(corner.x, corner.y), 0.0) - radius;
         float aa = max(fwidth(edge), 0.0001);
         diffuseColor.a *= 1.0 - smoothstep(-aa, aa, edge);
       #endif
     `);
   };
-  surface.customProgramCacheKey = () => 'spiral-focus-rounded-v4-9tap-backface';
+  surface.customProgramCacheKey = () => `spiral-focus-rounded-v6-${quality.blurSamples}`;
 }
 
 export function mountGallery(host) {
   const canvas = host.querySelector('canvas'), fallback = host.querySelector('.gallery-fallback');
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  const precisePointer = matchMedia('(hover: hover) and (pointer: fine)');
+  const calibrationMode = new URLSearchParams(location.search).get('spiral-calibration') === '1';
+  const calibrationCardDefaults = Object.freeze({ aspect: 1.6, fit: 'cover', focalX: 0.5, focalY: 0.5, size: 1, tiltX: 0, tiltY: 0, tiltZ: 0, radialOffset: 0, backgroundColor: '#11110f' });
+  const baseStageLabel = host.getAttribute('aria-label') || '螺旋画廊';
+  const motionState = {
+    current: 0,
+    target: 0,
+    velocity: 0,
+    isDragging: false,
+    isReceivingWheel: false,
+    isSnapping: false,
+    snapTarget: null,
+    lastInputTime: 0,
+  };
   const state = {
-    reveal: 0,
+    reveal: calibrationMode ? 1 : 0,
     activeIndex: 0,
     activeCardIndex: -1,
     activeProject: null,
-    isPointerDown: false,
-    isReceivingInput: false,
-    lastInputTime: 0,
-    velocity: 0,
-    snapTarget: null,
-    isSnapping: false,
-    hoveredCardIndex: -1,
-    hoveredProject: null,
-    qualityLevel: null,
     layout: 'desktop',
-    cameraZ: SPIRAL_LAYOUT.desktop.cameraZ,
+    cameraZ: 0,
   };
-  let renderer, config, cards = [], resources = [], frame = 0, last = 0;
-  let enabled = false, disposed = false, current = 0, target = 0, pointer = null, pointerY = 0;
-  let lastInputStamp = 0, previousCurrent = 0, motionSpeed = 0, frameDelta = .016;
+  let renderer, config, cards = [], resources = new Set(), resourceRefs = new Map(), frame = 0, last = 0, buildVersion = 0;
+  let enabled = false, disposed = false, pointer = null, pointerY = 0;
+  let previousCurrent = 0, inputVelocity = 0, pointerStartX = 0, pointerStartY = 0, pointerDragged = false;
   let compactLayout = false, viewportWidth = 0, viewportHeight = 0, resizeFrame = 0;
-  let buildVersion = 0, hoveredCard = null, pressedCard = null;
-  let pointerStartX = 0, pointerStartY = 0, pointerMoved = false, lastHoverRaycast = 0;
-  let hoverAnimating = false;
-  let dirty = true, previousReveal = -1, listMode = false;
-  const quality = {
-    level: null,
-    pixelRatio: SPIRAL_LAYOUT.pixelRatio,
-    blurEnabled: { value: 1 },
-    motionBlurEnabled: { value: 1 },
-    blurScale: 1,
-    anisotropy: 1,
-    maxTextureSize: 2048,
-    gridParallax: true,
-    runtimeFrames: 0,
-    runtimeTotalMs: 0,
-    runtimeSampled: false,
-  };
+  let dirty = true, previousReveal = -1, listMode = false, calibrationLogKey = '', hoverTimer = 0, lastHoverRaycast = 0;
+  let hoveredCard = null, contextLost = false;
+  const quality = { level: 'high', ...QUALITY_PRESETS.high, blurEnabled: { value: calibrationMode ? 0 : 1 } };
   const artwork = studyNames.map((_, i) => createArtwork(i));
   [...fallback.children].forEach((card, i) => { card.style.backgroundImage = `url(${artwork[i % artwork.length].toDataURL()})`; });
   const shell = host.parentElement, list = shell.querySelector('.gallery-list'), grid = shell.querySelector('.gallery-grid');
+  shell.classList.toggle('is-calibration', calibrationMode);
   const buttons = [...shell.querySelectorAll('[data-view]')];
   const entries = projects.length ? gallerySlots(projects.length) : gallerySlots(studyNames.length).map(slot => ({
     ...slot,
@@ -178,92 +241,98 @@ export function mountGallery(host) {
   }));
   entries.forEach((entry, i) => {
     const row = document.createElement('div'); row.className = 'gallery-list-row';
-    const img = document.createElement('img'); img.src = entry.cover || artwork[entry.study ?? i % artwork.length].toDataURL(); img.alt = '';
-    img.style.aspectRatio = String(entry.aspect);
-    const name = document.createElement('span'); name.textContent = entry.title;
+    const img = document.createElement('img'); img.src = entry.cover || artwork[entry.study ?? i % artwork.length].toDataURL(); img.alt = entry.placeholder ? '' : entry.title;
+    img.style.aspectRatio = String(entry.aspect); img.style.objectFit = entry.fit; img.style.objectPosition = `${entry.focalX * 100}% ${entry.focalY * 100}%`; img.style.backgroundColor = entry.backgroundColor;
+    const name = entry.link && !entry.placeholder ? document.createElement('a') : document.createElement('span'); name.textContent = entry.title;
+    if (name.tagName === 'A') { name.href = entry.link; name.target = '_blank'; name.rel = 'noreferrer'; }
     const meta = document.createElement('small'); meta.textContent = entry.placeholder ? '视觉预览 / '+String(i+1).padStart(2,'0') : String(i+1).padStart(2,'0');
     row.append(img, name, meta); list.append(row);
   });
   function switchView(event) {
+    if (calibrationMode) return;
     listMode = event.currentTarget.dataset.view === 'list';
+    cancelPointer();
     clearHover();
     list.hidden = !listMode; host.style.visibility = listMode ? 'hidden' : 'visible';
     buttons.forEach(button => button.setAttribute('aria-pressed', String((button.dataset.view === 'list') === listMode)));
-    up(); dirty = true; wake();
+    dirty = true; wake();
   }
   buttons.forEach(button => button.addEventListener('click', switchView));
   const scene = new THREE.Scene();
+  const spiralRoot = new THREE.Group();
+  spiralRoot.rotation.z = -0.05;
+  spiralRoot.position.set(-0.12, 0.05, 0);
+  scene.add(spiralRoot);
   const camera = new THREE.PerspectiveCamera(SPIRAL_LAYOUT.fov, 1, .1, 100);
-  // 24x8 keeps the transverse bow smooth while reducing vertex work per card.
+  // 24x8 keeps the shallow transverse bow smooth while reducing vertex work per card.
   const geometry = new THREE.PlaneGeometry(1, 1, 24, 8);
   const positions = geometry.attributes.position;
   for (let i = 0; i < positions.count; i++) {
-    const x = positions.getX(i), y = positions.getY(i);
-    // A shallow transverse bow: the center stays readable while both edges
-    // recede slightly from the camera. The shared geometry keeps UVs intact.
-    positions.setZ(i, -.52 * x * x + .06 * Math.sin(x * Math.PI) * y);
+    const x = positions.getX(i);
+    // A restrained bow keeps the card readable while its edges recede slightly.
+    positions.setZ(i, -.22 * x * x);
   }
   geometry.computeVertexNormals(); geometry.computeBoundingSphere();
-  const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, alphaTest: .05 });
+  const material = new THREE.MeshBasicMaterial({
+    side: THREE.FrontSide,
+    transparent: !calibrationMode,
+    alphaTest: .05,
+  });
   const projectedPosition = new THREE.Vector3();
-  const tangentPosition = new THREE.Vector3();
+  const worldPosition = new THREE.Vector3();
   const projectedTangent = new THREE.Vector3();
-  const raycaster = new THREE.Raycaster();
-  const pointerPosition = new THREE.Vector2(-100, -100);
+  const tangentPosition = new THREE.Vector3();
   const clickableMeshes = [];
-  const precisePointer = matchMedia('(hover: hover) and (pointer: fine)');
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2();
+  let hoverX = 0, hoverY = 0;
 
-  function setQuality(level) {
-    const preset = QUALITY_PRESETS[level];
-    if (!preset) return;
-    quality.level = level;
-    quality.pixelRatio = Math.min(preset.pixelRatio, Math.max(1, window.devicePixelRatio || 1));
-    quality.blurScale = preset.blurScale;
-    quality.anisotropy = preset.anisotropy;
-    quality.maxTextureSize = Math.min(preset.maxTextureSize, renderer?.capabilities.maxTextureSize ?? preset.maxTextureSize);
-    quality.blurEnabled.value = preset.blur ? 1 : 0;
-    quality.motionBlurEnabled.value = preset.motionBlur && !motion.matches ? 1 : 0;
-    quality.gridParallax = !compactLayout && !motion.matches && level !== 'low';
-    state.qualityLevel = level;
-    if (renderer && viewportWidth && viewportHeight) {
-      renderer.setPixelRatio(quality.pixelRatio);
-      renderer.setSize(viewportWidth, viewportHeight, false);
-    }
+  function retainResource(resource) {
+    if (!resource || typeof resource.dispose !== 'function') return resource;
+    resources.add(resource);
+    resourceRefs.set(resource, (resourceRefs.get(resource) || 0) + 1);
+    return resource;
+  }
+
+  function releaseResource(resource) {
+    if (!resource || !resourceRefs.has(resource)) return;
+    const refs = resourceRefs.get(resource) - 1;
+    if (refs > 0) { resourceRefs.set(resource, refs); return; }
+    resourceRefs.delete(resource); resources.delete(resource); resource.dispose();
+  }
+
+  function disposeBuild() {
     cards.forEach(card => {
-      const texture = card.children[0]?.material.map;
-      if (texture) {
-        limitTextureSize(texture);
-        texture.anisotropy = Math.min(quality.anisotropy, renderer?.capabilities.getMaxAnisotropy() ?? 1);
-      }
+      const surface = card.children[0]?.material;
+      if (surface?.map) releaseResource(surface.map);
+      if (surface) releaseResource(surface);
+      spiralRoot.remove(card);
     });
-    dirty = true; wake();
+    cards = [];
+    // Catch a resource retained by a late callback before a build switch.
+    [...resources].forEach(resource => { resource.dispose(); resources.delete(resource); resourceRefs.delete(resource); });
   }
 
-  function recordFrameTime(dt) {
-    if (!renderer || quality.runtimeSampled) return;
-    quality.runtimeFrames += 1;
-    quality.runtimeTotalMs += dt * 1000;
-    if (quality.runtimeFrames < 36) return;
-    quality.runtimeSampled = true;
-    const averageMs = quality.runtimeTotalMs / quality.runtimeFrames;
-    if (averageMs > 27 && quality.level !== 'low') setQuality(nextLowerQuality(quality.level));
+  function updateTextureUniforms(surface, texture) {
+    const uniforms = surface.userData.shaderUniforms;
+    if (uniforms) uniforms.spiralSourceAspect.value = textureAspect(texture);
   }
 
-  function limitTextureSize(texture) {
-    const image = texture?.image;
-    const width = image?.naturalWidth || image?.width || 0;
-    const height = image?.naturalHeight || image?.height || 0;
-    const maxSize = quality.maxTextureSize;
-    if (!width || !height || Math.max(width, height) <= maxSize) return;
-    const scale = maxSize / Math.max(width, height);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(width * scale));
-    canvas.height = Math.max(1, Math.round(height * scale));
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    texture.image = canvas;
-    texture.needsUpdate = true;
+  function configureTexture(texture) {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.anisotropy = Math.min(quality.anisotropy, renderer?.capabilities.getMaxAnisotropy() ?? 1);
+    return texture;
+  }
+
+  function replaceSurfaceMap(surface, texture) {
+    if (surface.map === texture) return;
+    const previous = surface.map;
+    surface.map = retainResource(configureTexture(texture));
+    if (previous) releaseResource(previous);
+    updateTextureUniforms(surface, texture);
+    surface.needsUpdate = true;
   }
 
   function fail() {
@@ -275,51 +344,58 @@ export function mountGallery(host) {
     if (new URLSearchParams(location.search).has('no-webgl')) throw new Error('Fallback requested');
     renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     renderer.setClearColor(0x11110f, 0);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
   } catch { fail(); }
   function rebuild() {
     const version = ++buildVersion;
-    cards.forEach(card => scene.remove(card));
-    clickableMeshes.length = 0;
-    resources.forEach(resource => resource.dispose()); resources = [];
+    disposeBuild();
     const loader = new THREE.TextureLoader();
+    const coverRequests = new Map();
     const sequenceLength = projects.length || studyNames.length;
     const poolSize = Math.ceil(config.count / sequenceLength) * sequenceLength;
     cards = gallerySlots(poolSize).map((slot, i) => {
       const group = new THREE.Group();
-      const surface = material.clone(); resources.push(surface);
-      applyFocus(surface, slot.aspect, quality);
+      const surface = retainResource(material.clone());
+      if (!calibrationMode) applyFocus(surface, slot, quality);
       const fallbackArtwork = artwork[slot.study ?? i % artwork.length];
       const createFallbackTexture = () => {
         const fallbackTexture = new THREE.CanvasTexture(fallbackArtwork);
-        limitTextureSize(fallbackTexture);
-        fallbackTexture.colorSpace = THREE.SRGBColorSpace;
-        return fallbackTexture;
+        return configureTexture(fallbackTexture);
       };
-      const texture = slot.cover ? loader.load(slot.cover, loadedTexture => {
-        if (version !== buildVersion || disposed) { loadedTexture.dispose(); return; }
-        limitTextureSize(loadedTexture); dirty = true; wake();
-      }, undefined, () => {
-        if (version !== buildVersion || disposed) return;
-        surface.map?.dispose();
-        surface.map = createFallbackTexture(); resources.push(surface.map);
-        surface.needsUpdate = true; dirty = true; wake();
-      }) : createFallbackTexture();
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.anisotropy = Math.min(quality.anisotropy, renderer?.capabilities.getMaxAnisotropy() ?? 1);
-      resources.push(texture); surface.map = texture;
+      // Show a deterministic 1.6 placeholder until the image has a measured
+      // size. An unloaded image must never be treated as an unknown 1:1 card.
+      surface.map = retainResource(createFallbackTexture());
+      updateTextureUniforms(surface, surface.map);
+      surface.needsUpdate = true;
+      if (slot.cover) {
+        let request = coverRequests.get(slot.cover);
+        if (!request) { request = { surfaces: new Set(), started: false }; coverRequests.set(slot.cover, request); }
+        request.surfaces.add(surface);
+        if (!request.started) {
+          request.started = true;
+          loader.load(slot.cover, loadedTexture => {
+            if (version !== buildVersion || disposed || !request.surfaces.size) { loadedTexture.dispose(); return; }
+            configureTexture(loadedTexture);
+            request.surfaces.forEach(targetSurface => replaceSurfaceMap(targetSurface, loadedTexture));
+            dirty = true; wake();
+          }, undefined, () => {
+            // The placeholder remains the visual fallback on load failure.
+            if (version === buildVersion && !disposed) { dirty = true; wake(); }
+          });
+        }
+      }
+      surface.transparent = !calibrationMode;
+      surface.opacity = 1;
       surface.depthTest = true;
       surface.depthWrite = true;
       const mesh = new THREE.Mesh(geometry, surface);
-      if (!slot.placeholder && slot.link) clickableMeshes.push(mesh);
       group.add(mesh);
-      group.userData = { ...slot, projectIndex: i % sequenceLength, isActive: false, hoverAmount: 0, focusAmount: 0 };
-      scene.add(group); return group;
+      group.userData = { ...slot, projectIndex: i % sequenceLength, isActive: false, focusAmount: 0 };
+      spiralRoot.add(group); return group;
     });
   }
-  function updateActiveCard() {
-    if (!cards.length || !config) return;
-    const slotShift = Math.round(current / config.step);
-    const nextCardIndex = ((Math.floor(cards.length / 2) - slotShift) % cards.length + cards.length) % cards.length;
+  function updateActiveCard(nextCardIndex) {
+    if (!cards.length || nextCardIndex < 0 || nextCardIndex >= cards.length) return;
     if (nextCardIndex === state.activeCardIndex) return;
     if (state.activeCardIndex >= 0 && cards[state.activeCardIndex]) cards[state.activeCardIndex].userData.isActive = false;
     const activeCard = cards[nextCardIndex];
@@ -327,364 +403,474 @@ export function mountGallery(host) {
     state.activeCardIndex = nextCardIndex;
     const nextProjectIndex = activeCard.userData.projectIndex ?? activeCard.userData.study ?? nextCardIndex;
     state.activeProject = activeCard.userData.placeholder ? null : activeCard.userData;
+    host.setAttribute('aria-label', state.activeProject
+      ? `${baseStageLabel}，当前项目：${state.activeProject.title}`
+      : baseStageLabel);
     if (nextProjectIndex !== state.activeIndex) {
       state.activeIndex = nextProjectIndex;
     }
   }
 
-  function updatePointerPosition(event) {
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return false;
-    pointerPosition.set(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    return true;
-  }
-
-  function getHitCard(event) {
-    if (!renderer || canvas.hidden || !updatePointerPosition(event)) return null;
-    raycaster.setFromCamera(pointerPosition, camera);
-    const intersections = raycaster.intersectObjects(clickableMeshes, false);
-    for (let i = 0; i < intersections.length; i++) {
-      const mesh = intersections[i].object;
-      const card = mesh.parent;
-      if (card?.visible && mesh.visible && card.userData.link && card.userData.focusAmount > .04) return card;
-    }
-    return null;
-  }
-
-  function setHover(card) {
-    if (hoveredCard === card) return;
-    if (hoveredCard) hoveredCard.userData.isHovered = false;
-    hoveredCard = card;
-    if (hoveredCard) {
-      hoveredCard.userData.isHovered = true;
-      state.hoveredCardIndex = cards.indexOf(hoveredCard);
-      state.hoveredProject = hoveredCard.userData;
-      host.dataset.hoverTitle = hoveredCard.userData.title || '';
-      host.title = hoveredCard.userData.title || '';
-      host.style.cursor = 'pointer';
-    } else {
-      state.hoveredCardIndex = -1;
-      state.hoveredProject = null;
-      delete host.dataset.hoverTitle;
-      host.removeAttribute('title');
-      host.style.cursor = '';
-    }
-    dirty = true; wake();
-  }
-
-  function clearHover() {
-    setHover(null);
-    pointerPosition.set(-100, -100);
-  }
-
-  function updateHover(event) {
-    if (!enabled || listMode || state.isPointerDown || compactLayout || !precisePointer.matches || !projects.length) {
-      clearHover();
-      return;
-    }
-    const now = performance.now();
-    if (now - lastHoverRaycast < 32) return;
-    lastHoverRaycast = now;
-    setHover(getHitCard(event));
-  }
-
-  function openProject(card) {
-    if (!card || card.userData.placeholder || typeof card.userData.link !== 'string' || !card.userData.link) return;
-    window.location.assign(card.userData.link);
+  function logCalibrationMetrics() {
+    const viewportKey = `${viewportWidth}x${viewportHeight}`;
+    if (!import.meta.env.DEV || !calibrationMode || calibrationLogKey === viewportKey || !cards.length) return;
+    const activeCard = cards[state.activeCardIndex] || cards[Math.floor(cards.length / 2)];
+    const mesh = activeCard?.children[0];
+    if (!mesh || !viewportWidth || !viewportHeight) return;
+    scene.updateMatrixWorld(true);
+    const left = new THREE.Vector3(-0.5, 0, 0).applyMatrix4(mesh.matrixWorld).project(camera);
+    const right = new THREE.Vector3(0.5, 0, 0).applyMatrix4(mesh.matrixWorld).project(camera);
+    const center = new THREE.Vector3(0, 0, 0).applyMatrix4(activeCard.matrixWorld).project(camera);
+    console.info('[spiral-calibration]', JSON.stringify({
+      viewportWidth,
+      viewportHeight,
+      cameraZ: camera.position.z,
+      radius: config.radius,
+      pitch: config.pitch,
+      step: config.step,
+      cardWidth: config.width,
+      visibleCardCount: cards.filter(card => card.visible).length,
+      activeCardProjectedWidth: Math.abs(right.x - left.x) * viewportWidth / 2,
+      activeCardProjectedCenter: {
+        x: (center.x + 1) * viewportWidth / 2,
+        y: (1 - center.y) * viewportHeight / 2,
+      },
+    }));
+    calibrationLogKey = viewportKey;
   }
 
   function draw() {
+    camera.updateMatrixWorld(true);
     const spread = .78 + state.reveal * .22;
-    const nearDistance = Math.max(.1, camera.position.z - config.radius * 1.2);
-    const farDistance = camera.position.z + config.radius * 1.8 + config.pitch * .75;
-    const speed = Math.max(motionSpeed, Math.abs(state.velocity));
-    const speedFactor = THREE.MathUtils.clamp(speed / SPIRAL_LAYOUT.focus.speedForBlur, 0, 1);
-    hoverAnimating = false;
-    updateActiveCard();
+    let closestCardIndex = -1;
+    let closestDistance = Infinity;
+    clickableMeshes.length = 0;
+    spiralRoot.updateMatrixWorld(true);
     cards.forEach((card, i) => {
-      const offset = wrapSpiralOffset((i - Math.floor(cards.length / 2)) * config.step + current, cards.length * config.step);
-      const angle = offset;
-      const { aspect, size, tiltX, tiltY, tiltZ, radialOffset } = card.userData;
+      const baseOffset = (i - Math.floor(cards.length / 2)) * config.step;
+      const offset = wrapSpiralOffset(baseOffset + motionState.current, cards.length * config.step);
+      const cardData = calibrationMode ? calibrationCardDefaults : card.userData;
+      const { aspect, size, radialOffset, tiltX, tiltY, tiltZ } = cardData;
       const radius = config.radius + radialOffset;
-      card.position.set(Math.sin(angle) * radius * spread, offset * config.pitch / (Math.PI * 2) * spread, Math.cos(angle) * radius);
-      card.rotation.set(.08 * Math.sin(angle) + tiltX, angle - .22 * Math.sin(angle) + tiltY, -.055 * Math.sin(angle) + tiltZ);
+      const transform = calculateSpiralTransform({ offset, radius, pitch: config.pitch, spread });
+      applyCardTransform(card, transform, { width: config.width * size, aspect, tiltX, tiltY, tiltZ });
       const surface = card.children[0].material;
-      const distance = card.position.distanceTo(camera.position);
-      const projected = projectedPosition.copy(card.position).project(camera);
-      const screenDistance = Math.hypot(projected.x, projected.y);
-      const focusAmount = calculateFocusAmount({ angle, distance, screenDistance, speed, nearDistance, farDistance });
-      const depthAmount = 1 - THREE.MathUtils.smoothstep(distance, nearDistance, farDistance);
-      const focusScale = THREE.MathUtils.lerp(.82, 1.08, focusAmount);
-      const brightness = THREE.MathUtils.lerp(.58, 1, focusAmount);
-      const opacity = THREE.MathUtils.lerp(.4, 1, focusAmount);
-      const hoverTarget = card === hoveredCard ? 1 : 0;
-      const previousHover = card.userData.hoverAmount || 0;
-      const hoverAmount = THREE.MathUtils.damp(previousHover, hoverTarget, 18, frameDelta);
-      card.userData.hoverAmount = hoverAmount;
-      if (Math.abs(hoverAmount - hoverTarget) > .001) hoverAnimating = true;
-      const blurFalloff = 1 - THREE.MathUtils.smoothstep(focusAmount, .78, .95);
-      const blur = quality.blurEnabled.value ? THREE.MathUtils.clamp((1 - focusAmount) * (.005 + speedFactor * .004) * blurFalloff * quality.blurScale, 0, SPIRAL_LAYOUT.focus.maxBlur) : 0;
-      const motionAmount = quality.motionBlurEnabled.value ? speedFactor * (1 - focusAmount) * .42 : 0;
-      const motionDirection = surface.userData.motionDirection;
-      tangentPosition.set(
-        card.position.x + Math.cos(angle) * radius * spread * .16,
-        card.position.y + config.pitch / (Math.PI * 2) * spread * .16,
-        card.position.z - Math.sin(angle) * radius * .16,
-      );
-      const tangent = projectedTangent.copy(tangentPosition).project(camera);
-      const tangentX = tangent.x - projected.x, tangentY = tangent.y - projected.y;
-      const tangentLength = Math.hypot(tangentX, tangentY);
-      if (motionAmount > .001 && tangentLength > .0001) {
-        const direction = state.velocity < 0 ? -1 : 1;
-        motionDirection.set(direction * tangentX / tangentLength, direction * tangentY / tangentLength);
-      } else motionDirection.set(1, 0);
+      worldPosition.copy(card.position).applyMatrix4(spiralRoot.matrixWorld);
+      const projected = projectedPosition.copy(worldPosition).project(camera);
+      const absoluteOffset = Math.abs(offset);
+      if (absoluteOffset < closestDistance) {
+        closestDistance = absoluteOffset;
+        closestCardIndex = i;
+      }
+
+      if (calibrationMode) {
+        card.userData.focusAmount = 1;
+        card.visible = projected.z > -1.08 && projected.z < 1.08 && Math.abs(projected.x) < 1.45 && Math.abs(projected.y) < 1.45;
+        card.renderOrder = 0;
+        card.children[0].renderOrder = 0;
+        surface.transparent = false;
+        surface.opacity = 1;
+        surface.depthTest = true;
+        surface.depthWrite = true;
+        surface.color.setScalar(1);
+        return;
+      }
+
+      const focusAmount = calculateFocusAmount(offset, config.step);
+      const focusScale = THREE.MathUtils.lerp(.9, 1.07, focusAmount);
+      const brightness = THREE.MathUtils.lerp(.78, 1, focusAmount);
+      const opacity = THREE.MathUtils.lerp(.72, 1, focusAmount);
+      const blur = quality.blurEnabled.value
+        ? THREE.MathUtils.clamp((1 - focusAmount) * .004, 0, SPIRAL_LAYOUT.focus.maxBlur)
+        : 0;
       card.userData.focusAmount = focusAmount;
-      const visible = projected.z > -1.08 && projected.z < 1.08 && Math.abs(projected.x) < 1.45 && Math.abs(projected.y) < 1.45 && opacity > .05;
-      card.visible = visible;
-      card.renderOrder = 100 + Math.round(depthAmount * 1000);
-      card.children[0].renderOrder = card.renderOrder;
+      card.visible = projected.z > -1.08 && projected.z < 1.08 && Math.abs(projected.x) < 1.45 && Math.abs(projected.y) < 1.45;
+      card.renderOrder = 0;
+      // The actual Mesh receives a distance-derived order. The Group's
+      // renderOrder is intentionally left neutral because Three.js sorts the
+      // drawable child, not an enclosing Group.
+      card.children[0].renderOrder = Math.round(1000 - worldPosition.distanceTo(camera.position) * 10);
       surface.userData.blur.value = blur;
-      surface.userData.motionAmount.value = motionAmount;
-      surface.color.setScalar(Math.min(1.04, brightness + hoverAmount * .045));
+      const hoverScale = card === hoveredCard ? 1.015 : 1;
+      surface.color.setScalar(brightness * (card === hoveredCard ? 1.03 : 1));
       surface.opacity = opacity;
-      const cardWidth = config.width * size;
-      // A tiny depth multiplier makes wider cards bow a little more without
-      // turning portrait cards into visibly cylindrical surfaces.
-      const hoverScale = 1 + hoverAmount * .02;
-      card.scale.set(cardWidth * focusScale * hoverScale, cardWidth * focusScale * hoverScale / aspect, .9 + .16 * size);
+      const cardWidth = config.width * Math.min(1.1, size * focusScale * hoverScale);
+      card.scale.set(cardWidth, cardWidth / aspect, 1);
+      const uniforms = surface.userData.shaderUniforms;
+      if (uniforms) {
+        const speedFactor = quality.motionBlur && !motion.matches
+          ? THREE.MathUtils.clamp(Math.abs(motionState.velocity) / 1.35, 0, 1)
+          : 0;
+        const motionAmount = speedFactor * (1 - focusAmount) * .22;
+        uniforms.spiralMotionAmount.value = motionAmount;
+        if (motionAmount > .00001) {
+          tangentPosition.set(
+            card.position.x + Math.cos(offset) * radius * .05,
+            card.position.y + config.pitch / (Math.PI * 2) * .05,
+            card.position.z - Math.sin(offset) * radius * .05,
+          ).applyMatrix4(spiralRoot.matrixWorld);
+          projectedTangent.copy(tangentPosition).project(camera);
+          const dx = projectedTangent.x - projected.x;
+          const dy = -(projectedTangent.y - projected.y);
+          const length = Math.hypot(dx, dy);
+          uniforms.spiralMotionDirection.value.set(length > .00001 ? dx / length : 0, length > .00001 ? dy / length : 0);
+        } else {
+          uniforms.spiralMotionDirection.value.set(0, 0);
+        }
+      }
+      if (card.visible && card.userData.link && !card.userData.placeholder) clickableMeshes.push(card.children[0]);
     });
+    updateActiveCard(closestCardIndex);
     if (grid) {
-      if (quality.gridParallax) {
-        const gridOffsetX = Math.sin(current * .55) * 2.5;
-        const gridOffsetY = THREE.MathUtils.clamp(current * .32, -4, 4);
-        grid.style.transform = `translate3d(${gridOffsetX.toFixed(2)}px,${gridOffsetY.toFixed(2)}px,0)`;
-      } else grid.style.transform = 'none';
+      if (calibrationMode || motion.matches || compactLayout) grid.style.transform = 'none';
+      else grid.style.transform = `translate3d(${Math.sin(motionState.current * .5) * 2}px, ${THREE.MathUtils.clamp(motionState.current * .2, -3, 3)}px, 0)`;
     }
     renderer?.render(scene, camera);
+    logCalibrationMetrics();
   }
   function normalizeTravel(span) {
-    if (!Number.isFinite(span) || span <= 0 || !Number.isFinite(current)) return;
-    const normalized = wrapSpiralOffset(current, span);
-    const distance = current - normalized;
+    if (!Number.isFinite(span) || span <= 0 || !Number.isFinite(motionState.current)) return;
+    const normalized = wrapSpiralOffset(motionState.current, span);
+    const distance = motionState.current - normalized;
     if (Math.abs(distance) < SNAP_EPSILON) return;
-    current = normalized;
-    target -= distance;
-    if (state.snapTarget !== null) state.snapTarget -= distance;
+    motionState.current = normalized;
+    motionState.target -= distance;
+    if (motionState.snapTarget !== null) motionState.snapTarget -= distance;
   }
   function startSnap() {
-    if (!config || !cards.length || state.isPointerDown) return;
-    state.snapTarget = Math.round(current / config.step) * config.step;
-    target = state.snapTarget;
-    state.isReceivingInput = false;
-    state.isSnapping = Math.abs(target - current) > SNAP_EPSILON;
-    if (!state.isSnapping) {
-      current = target;
-      state.snapTarget = null;
-      state.velocity = 0;
-    }
+    if (calibrationMode || !config || !cards.length || motionState.isDragging) return;
+    const totalSpan = cards.length * config.step;
+    const nearestGridPoint = Math.round(motionState.target / config.step) * config.step;
+    // Select the nearest cyclic equivalent, so a snap never traverses a full circle.
+    const equivalentCycles = Math.round((motionState.current - nearestGridPoint) / totalSpan);
+    const snapTarget = nearestGridPoint + equivalentCycles * totalSpan;
+    motionState.snapTarget = snapTarget;
+    motionState.target = snapTarget;
+    motionState.isReceivingWheel = false;
+    motionState.isSnapping = Math.abs(snapTarget - motionState.current) > SNAP_EPSILON;
+    if (!motionState.isSnapping) finishSnap();
+  }
+  function finishSnap() {
+    if (motionState.snapTarget === null) return;
+    motionState.current = motionState.snapTarget;
+    motionState.target = motionState.snapTarget;
+    motionState.velocity = 0;
+    motionState.isSnapping = false;
+    motionState.snapTarget = null;
+    motionState.isReceivingWheel = false;
   }
   function tick(time) {
     frame = 0;
     if (disposed || document.hidden || !renderer || canvas.hidden) return;
     const dt = Math.min((time - (last || time)) / 1000, .05); last = time;
-    frameDelta = dt;
-    recordFrameTime(dt);
-    if (state.isReceivingInput && !state.isPointerDown && !state.isSnapping && time - state.lastInputTime >= SNAP_DELAY) startSnap();
-    const moving = Math.abs(target - current) > .0001;
-    if (moving) {
-      const damping = state.isSnapping ? (motion.matches ? 26 : 14) : (motion.matches ? 100 : SPIRAL_LAYOUT.damping);
-      current = THREE.MathUtils.damp(current, target, damping, dt);
+    if (calibrationMode) {
+      motionState.current = 0;
+      motionState.target = 0;
+      motionState.velocity = 0;
+      motionState.isReceivingWheel = false;
+      motionState.isSnapping = false;
+      motionState.snapTarget = null;
     }
-    else current = target;
-    // Keep long sessions numerically stable without changing the easing distance.
     const span = cards.length * config.step;
-    normalizeTravel(span);
-    const frameVelocity = (current - previousCurrent) / Math.max(dt, .001);
-    motionSpeed = motion.matches ? 0 : THREE.MathUtils.damp(motionSpeed, Math.abs(frameVelocity), 12, dt);
-    state.velocity = motion.matches ? 0 : THREE.MathUtils.damp(state.velocity, frameVelocity, 10, dt);
-    if (state.isSnapping && Math.abs(target - current) <= SNAP_EPSILON) {
-      current = target;
-      state.snapTarget = null;
-      state.isSnapping = false;
-      state.velocity = 0;
+    if (!motionState.isSnapping) normalizeTravel(span);
+    if (!calibrationMode && motionState.isReceivingWheel && !motionState.isDragging && !motionState.isSnapping && time - motionState.lastInputTime >= SNAP_DELAY) startSnap();
+    const moving = Math.abs(motionState.target - motionState.current) > .0001;
+    if (moving) {
+      const damping = motion.matches
+        ? 100
+        : motionState.isSnapping ? SPIRAL_LAYOUT.snapDamping : SPIRAL_LAYOUT.normalDamping;
+      motionState.current = THREE.MathUtils.damp(motionState.current, motionState.target, damping, dt);
+    } else {
+      motionState.current = motionState.target;
     }
+    // Keep long sessions numerically stable without changing the easing distance.
+    if (!motionState.isSnapping) normalizeTravel(span);
+    if (motionState.isSnapping && Math.abs(motionState.target - motionState.current) <= SNAP_EPSILON) finishSnap();
+    const renderVelocity = (motionState.current - previousCurrent) / Math.max(dt, .001);
+    motionState.velocity = motion.matches
+      ? 0
+      : THREE.MathUtils.damp(motionState.velocity, renderVelocity, 10, dt);
     if (dirty || moving || previousReveal !== state.reveal) draw();
-    previousCurrent = current;
+    previousCurrent = motionState.current;
     previousReveal = state.reveal; dirty = false;
-    const waitingForSnap = state.isReceivingInput && !state.isPointerDown && !state.isSnapping;
-    if (moving || waitingForSnap || state.isSnapping || hoverAnimating || state.reveal > 0 && state.reveal < 1) wake();
+    const waitingForSnap = motionState.isReceivingWheel && !motionState.isDragging && !motionState.isSnapping;
+    if (moving || waitingForSnap || motionState.isSnapping || state.reveal > 0 && state.reveal < 1) wake();
   }
   function wake() {
     if (!frame && !disposed && !document.hidden && renderer && !canvas.hidden) frame = requestAnimationFrame(tick);
   }
 
+  function clearHover() {
+    if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = 0; }
+    if (hoveredCard) { hoveredCard = null; dirty = true; wake(); }
+    host.style.removeProperty('cursor');
+  }
+
+  function updatePointerNdc(event) {
+    const rect = host.getBoundingClientRect();
+    pointerNdc.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+    pointerNdc.y = -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
+  }
+
+  function raycastAt(event) {
+    if (!renderer || canvas.hidden || listMode || !clickableMeshes.length) return null;
+    updatePointerNdc(event);
+    raycaster.setFromCamera(pointerNdc, camera);
+    return raycaster.intersectObjects(clickableMeshes, false)[0] || null;
+  }
+
+  function runHoverRaycast() {
+    hoverTimer = 0;
+    if (!precisePointer.matches || !enabled || listMode || motionState.isDragging || document.hidden) { clearHover(); return; }
+    lastHoverRaycast = performance.now();
+    const hit = raycastAt({ clientX: hoverX, clientY: hoverY });
+    const nextCard = hit?.object?.parent || null;
+    if (nextCard !== hoveredCard) { hoveredCard = nextCard; dirty = true; wake(); }
+    if (hoveredCard) host.style.cursor = 'pointer'; else host.style.removeProperty('cursor');
+  }
+
+  function hover(event) {
+    if (!precisePointer.matches || !enabled || listMode) return;
+    hoverX = event.clientX; hoverY = event.clientY;
+    if (motionState.isDragging) { clearHover(); return; }
+    const now = performance.now();
+    const remaining = 32 - (now - lastHoverRaycast);
+    if (remaining <= 0) runHoverRaycast();
+    else if (!hoverTimer) hoverTimer = window.setTimeout(runHoverRaycast, remaining);
+  }
+
+  function navigateFromPointer(event) {
+    const hit = raycastAt(event);
+    const card = hit?.object?.parent;
+    const link = card?.userData?.link;
+    if (!card || card.userData.placeholder || typeof link !== 'string' || !link.trim()) return;
+    window.location.assign(link);
+  }
+
   function mobileCameraZ(width, height) {
-    const mobile = SPIRAL_LAYOUT.mobile;
+    const mobile = config;
     const viewportAspect = Math.max(.34, width / Math.max(1, height));
-    const targetShare = width > height ? mobile.landscapeShare : mobile.targetShare;
+    const targetShare = mobile.targetShare;
     // Solve for the distance that lets the focused first card occupy the
     // intended width. This deliberately does not use the desktop framing rule.
-    const focusedCardWidth = mobile.width * 1.08 * 1.08;
+    const focusedCardWidth = mobile.width * 1.1;
     const distance = focusedCardWidth / (2 * targetShare * Math.tan(THREE.MathUtils.degToRad(SPIRAL_LAYOUT.fov / 2)) * viewportAspect);
     return THREE.MathUtils.clamp(mobile.radius + distance, mobile.cameraMin, mobile.cameraMax);
   }
 
-  function resize() {
+  function updateViewport() {
     const width = host.clientWidth, height = host.clientHeight;
     const nextCompact = isCompactViewport(width, height);
-    const next = nextCompact ? SPIRAL_LAYOUT.mobile : SPIRAL_LAYOUT.desktop;
+    const isCompactLandscape = nextCompact && width > height && height < 560;
+    const next = calibrationMode
+      ? nextCompact ? CALIBRATION_MOBILE_LAYOUT : SPIRAL_LAYOUT.desktop
+      : nextCompact ? (isCompactLandscape ? SPIRAL_LAYOUT.compactLandscape : SPIRAL_LAYOUT.mobile) : SPIRAL_LAYOUT.desktop;
+    const nextQualityLevel = calibrationMode ? 'high' : chooseQuality(width, height, window.devicePixelRatio || 1, nextCompact, motion.matches);
+    const qualityChanged = nextQualityLevel !== quality.level;
     const layoutChanged = next !== config || nextCompact !== compactLayout;
     compactLayout = nextCompact;
     config = next;
-    host.dataset.layout = compactLayout ? 'mobile' : 'desktop';
+    host.dataset.layout = compactLayout ? (isCompactLandscape && !calibrationMode ? 'compact-landscape' : 'mobile') : 'desktop';
+    const rootRotationZ = compactLayout ? (config.rootRotationZ ?? -0.05) : -0.05;
+    const rootOffsetX = compactLayout ? (config.rootOffsetX ?? -0.12) : -0.12;
+    const rootOffsetY = compactLayout ? (config.rootOffsetY ?? 0.05) : 0.05;
+    spiralRoot.rotation.z = rootRotationZ;
+    spiralRoot.position.set(rootOffsetX, rootOffsetY, 0);
+    if (qualityChanged) {
+      Object.assign(quality, QUALITY_PRESETS[nextQualityLevel], { level: nextQualityLevel });
+      quality.blurEnabled.value = calibrationMode ? 0 : quality.blurSamples > 1 ? 1 : 0;
+    }
     camera.aspect = width / Math.max(1, height);
     if (compactLayout) {
       camera.position.set(0, 0, mobileCameraZ(width, height));
     } else {
-      camera.position.set(0, 0, Math.max(config.cameraZ, (config.radius + config.width * .55) / Math.tan(THREE.MathUtils.degToRad(SPIRAL_LAYOUT.fov / 2)) / camera.aspect + config.radius));
+      const calculatedCameraZ = calculateCameraZ({
+        radius: config.radius,
+        cardWidth: config.width,
+        viewportAspect: camera.aspect,
+        fov: SPIRAL_LAYOUT.fov,
+        targetScreenShare: config.cameraShare,
+      });
+      camera.position.set(0, 0, calculatedCameraZ);
     }
     camera.updateProjectionMatrix();
-    state.layout = compactLayout ? 'mobile' : 'desktop';
+    camera.updateMatrixWorld(true);
+    state.layout = compactLayout ? (isCompactLandscape && !calibrationMode ? 'compact-landscape' : 'mobile') : 'desktop';
     state.cameraZ = camera.position.z;
+    state.quality = quality.level;
     viewportWidth = width; viewportHeight = height;
-    const requestedQuality = initialQualityLevel(width, height, compactLayout);
-    const qualityOrder = { high: 0, medium: 1, low: 2 };
-    if (!quality.level || qualityOrder[requestedQuality] > qualityOrder[quality.level]) setQuality(requestedQuality);
-    if (layoutChanged) {
-      quality.runtimeFrames = 0; quality.runtimeTotalMs = 0; quality.runtimeSampled = false;
+    if (layoutChanged || qualityChanged) {
       if (renderer && !canvas.hidden) rebuild();
     }
-    renderer?.setPixelRatio(quality.pixelRatio);
+    const pixelRatio = calibrationMode ? SPIRAL_LAYOUT.pixelRatio : Math.min(quality.pixelRatio, Math.max(1, window.devicePixelRatio || 1));
+    renderer?.setPixelRatio(pixelRatio);
     renderer?.setSize(width, height, false);
+    motionState.velocity = 0;
+    inputVelocity = 0;
+    previousCurrent = motionState.current;
+    last = 0;
     dirty = true; wake();
   }
   function move(delta) {
-    if (!Number.isFinite(delta) || delta === 0) return;
+    if (calibrationMode || !Number.isFinite(delta) || delta === 0) return;
     const now = performance.now();
-    const elapsed = Math.max(.016, (now - (lastInputStamp || now - 16)) / 1000);
-    const inputVelocity = THREE.MathUtils.clamp(delta / elapsed, -6, 6);
-    state.velocity = THREE.MathUtils.clamp(state.velocity * .35 + inputVelocity * .65, -6, 6);
-    lastInputStamp = now;
-    state.lastInputTime = now;
-    state.isReceivingInput = true;
-    state.isSnapping = false;
-    state.snapTarget = null;
-    target += delta;
+    const elapsed = Math.max(.016, (now - (motionState.lastInputTime || now - 16)) / 1000);
+    // inputVelocity is release-only input speed; motionState.velocity is rendered speed.
+    inputVelocity = THREE.MathUtils.clamp(delta / elapsed, -6, 6);
+    motionState.lastInputTime = now;
+    motionState.isReceivingWheel = true;
+    motionState.isSnapping = false;
+    motionState.snapTarget = null;
+    motionState.target += delta;
     wake();
   }
   function wheel(event) {
-    if (!enabled || listMode || event.ctrlKey) return;
+    if (calibrationMode || !enabled || listMode || event.ctrlKey) return;
     event.preventDefault();
-    clearHover();
-    const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
-    move(THREE.MathUtils.clamp(pixels, -160, 160) * SPIRAL_LAYOUT.wheelSpeed);
+    const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewportHeight : 1);
+    move(THREE.MathUtils.clamp(pixels, -140, 140) * SPIRAL_LAYOUT.wheelSpeed);
   }
   function down(event) {
-    if (!enabled || listMode || event.button !== 0 || !event.isPrimary) return;
+    if (calibrationMode || !enabled || listMode || event.button !== 0 || !event.isPrimary) return;
     host.focus({ preventScroll: true });
-    const now = performance.now();
-    pressedCard = projects.length ? getHitCard(event) : null;
     clearHover();
-    pointerStartX = event.clientX; pointerStartY = event.clientY; pointerMoved = false;
-    state.isPointerDown = true;
-    state.isReceivingInput = true;
-    state.isSnapping = false;
-    state.snapTarget = null;
-    state.velocity = 0;
-    state.lastInputTime = now;
-    lastInputStamp = now;
+    const now = performance.now();
+    motionState.isDragging = true;
+    motionState.isReceivingWheel = true;
+    motionState.isSnapping = false;
+    motionState.snapTarget = null;
+    motionState.velocity = 0;
+    motionState.lastInputTime = now;
+    inputVelocity = 0;
+    pointerStartX = event.clientX; pointerStartY = event.clientY; pointerDragged = false;
     host.classList.add('is-dragging'); pointer = event.pointerId; pointerY = event.clientY; host.setPointerCapture(pointer);
   }
   function drag(event) {
-    if (!enabled) return;
-    if (event.pointerId !== pointer) {
-      if (pointer === null) updateHover(event);
-      return;
+    if (calibrationMode || !enabled) return;
+    if (event.pointerId !== pointer || !motionState.isDragging) return;
+    if (!pointerDragged && Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY) > 8) {
+      pointerDragged = true;
+      clearHover();
     }
-    if (!pointerMoved && Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY) > HOVER_DRAG_THRESHOLD) pointerMoved = true;
-    clearHover();
+    if (!pointerDragged) return;
     move((pointerY - event.clientY) * SPIRAL_LAYOUT.dragSpeed); pointerY = event.clientY;
   }
   function endPointerInput(withInertia = true, event = null) {
-    const wasPointerActive = state.isPointerDown || pointer !== null;
-    const clickedCard = withInertia && event && !pointerMoved && pressedCard && getHitCard(event) === pressedCard ? pressedCard : null;
+    const wasPointerActive = motionState.isDragging || pointer !== null;
+    const activePointer = pointer;
     if (wasPointerActive) {
-      if (withInertia && !motion.matches) target += THREE.MathUtils.clamp(state.velocity * .045, -.16, .16);
-      state.isPointerDown = false;
-      state.isReceivingInput = true;
-      state.lastInputTime = performance.now();
-      state.isSnapping = false;
-      state.snapTarget = null;
+      if (withInertia && !motion.matches) motionState.target += THREE.MathUtils.clamp(inputVelocity * .045, -config.step * .35, config.step * .35);
+      motionState.isDragging = false;
+      motionState.isReceivingWheel = true;
+      motionState.lastInputTime = performance.now();
+      motionState.isSnapping = false;
+      motionState.snapTarget = null;
     }
     host.classList.remove('is-dragging');
-    if (pointer !== null && host.hasPointerCapture(pointer)) host.releasePointerCapture(pointer);
+    if (activePointer !== null && host.hasPointerCapture(activePointer)) host.releasePointerCapture(activePointer);
     pointer = null;
-    pressedCard = null; pointerMoved = false;
-    clearHover();
-    if (clickedCard) openProject(clickedCard);
+    pointerDragged = false;
+    inputVelocity = 0;
     wake();
   }
   function up(event = null) {
     if (event && pointer !== null && event.pointerId !== pointer) return;
+    const shouldNavigate = !!event && motionState.isDragging && !pointerDragged;
+    if (shouldNavigate) navigateFromPointer(event);
     endPointerInput(true, event);
   }
   function cancelPointer() {
     endPointerInput(false);
-    clearHover();
   }
-  function leave() { clearHover(); }
   function key(event) {
-    if (!enabled || listMode || !['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].includes(event.key)) return;
+    if (calibrationMode || !enabled || listMode) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (state.activeProject?.link && !state.activeProject.placeholder) { event.preventDefault(); window.location.assign(state.activeProject.link); }
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    clearHover();
+    if (event.key === 'Home') { motionState.target = 0; motionState.lastInputTime = performance.now(); motionState.isReceivingWheel = true; motionState.isSnapping = false; motionState.snapTarget = null; wake(); return; }
+    if (event.key === 'End') { motionState.target = Math.floor(cards.length / 2) * config.step; motionState.lastInputTime = performance.now(); motionState.isReceivingWheel = true; motionState.isSnapping = false; motionState.snapTarget = null; wake(); return; }
     const steps = event.key.startsWith('Page') ? 3 : 1;
-    move((event.key.includes('Down') ? 1 : -1) * config.step * steps);
+    const direction = event.key.includes('Down') ? 1 : -1;
+    motionState.target = Math.round(motionState.target / config.step) * config.step + direction * config.step * steps;
+    motionState.lastInputTime = performance.now();
+    motionState.isReceivingWheel = true;
+    motionState.isSnapping = false;
+    motionState.snapTarget = null;
+    wake();
   }
   function visibility() {
-    if (document.hidden) cancelPointer();
-    clearHover(); motionSpeed = 0; state.velocity = 0;
-    cancelAnimationFrame(frame); frame = 0; last = 0; previousCurrent = current;
+    if (document.hidden) { cancelPointer(); clearHover(); }
+    inputVelocity = 0; motionState.velocity = 0;
+    cancelAnimationFrame(frame); frame = 0; last = 0; previousCurrent = motionState.current;
     if (!document.hidden) { dirty = true; wake(); }
   }
-  function lost(event) { event.preventDefault(); fail(); }
-  function queueResize() {
-    if (resizeFrame) return;
-    resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; resize(); });
+  let resumeAfterContextRestore = false;
+  function lost(event) {
+    event.preventDefault();
+    resumeAfterContextRestore = enabled;
+    contextLost = true;
+    clearHover(); fail();
   }
-  function motionChange() {
-    if (quality.level) setQuality(quality.level);
+  function restored() {
+    if (disposed || !contextLost) return;
+    contextLost = false;
+    canvas.hidden = false; fallback.hidden = true;
+    enabled = resumeAfterContextRestore;
+    host.dataset.interactive = String(enabled && !calibrationMode);
+    dirty = true; updateViewport(); wake();
+  }
+  function motionChanged() {
+    quality.blurEnabled.value = calibrationMode ? 0 : quality.blurSamples > 1 ? 1 : 0;
     dirty = true; wake();
   }
+  function queueResize() {
+    if (resizeFrame) return;
+    resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; updateViewport(); });
+  }
   host.addEventListener('wheel', wheel, { passive: false });
-  host.addEventListener('pointerdown', down); host.addEventListener('pointermove', drag);
-  host.addEventListener('pointerup', up); host.addEventListener('pointercancel', cancelPointer); host.addEventListener('pointerleave', leave); host.addEventListener('keydown', key);
-  canvas.addEventListener('webglcontextlost', lost);
+  host.addEventListener('pointerdown', down); host.addEventListener('pointermove', drag); host.addEventListener('pointermove', hover);
+  host.addEventListener('pointerup', up); host.addEventListener('pointercancel', cancelPointer); host.addEventListener('keydown', key);
+  host.addEventListener('pointerleave', clearHover);
+  canvas.addEventListener('webglcontextlost', lost); canvas.addEventListener('webglcontextrestored', restored);
+  motion.addEventListener?.('change', motionChanged);
   window.addEventListener('resize', queueResize); window.addEventListener('blur', cancelPointer); document.addEventListener('visibilitychange', visibility);
-  motion.addEventListener?.('change', motionChange);
-  resize();
+  updateViewport();
   return {
-    state, update() { dirty = true; wake(); },
-    enable(value) { enabled = value && !!renderer && !canvas.hidden; if (!value) cancelPointer(); host.dataset.interactive = String(enabled); },
+    state, motionState, update() { dirty = true; wake(); },
+    enable(value) {
+      enabled = value && !!renderer && !canvas.hidden;
+      if (!value) {
+        cancelPointer();
+        motionState.isReceivingWheel = false;
+        motionState.isSnapping = false;
+        motionState.snapTarget = null;
+        motionState.velocity = 0;
+        inputVelocity = 0;
+      }
+      host.dataset.interactive = String(enabled && !calibrationMode);
+    },
     reset() {
-      enabled = false; cancelPointer(); clearHover(); current = target = state.reveal = 0;
-      state.activeIndex = 0; state.activeCardIndex = -1; state.activeProject = null;
-      state.isPointerDown = false; state.isReceivingInput = false; state.lastInputTime = 0;
-      state.velocity = 0; state.snapTarget = null; state.isSnapping = false; state.hoveredCardIndex = -1; state.hoveredProject = null;
-      lastInputStamp = 0; previousCurrent = 0; motionSpeed = 0; hoverAnimating = false; dirty = true; wake();
+      enabled = false; cancelPointer(); clearHover(); motionState.current = motionState.target = calibrationMode ? 0 : 0; motionState.velocity = 0;
+      motionState.isDragging = false; motionState.isReceivingWheel = false; motionState.isSnapping = false; motionState.snapTarget = null; motionState.lastInputTime = 0;
+      state.reveal = calibrationMode ? 1 : 0;
+      cards.forEach(card => { card.userData.isActive = false; });
+      state.activeIndex = 0; state.activeCardIndex = -1; state.activeProject = null; host.setAttribute('aria-label', baseStageLabel);
+      inputVelocity = 0; previousCurrent = 0; last = 0; dirty = true; wake();
     },
     dispose() {
-      disposed = true; cancelAnimationFrame(frame); cancelAnimationFrame(resizeFrame); resizeFrame = 0; cancelPointer();
+      if (disposed) return;
+      disposed = true; cancelAnimationFrame(frame); cancelAnimationFrame(resizeFrame); resizeFrame = 0; cancelPointer(); clearHover();
       host.removeEventListener('wheel', wheel); host.removeEventListener('pointerdown', down);
-      host.removeEventListener('pointermove', drag); host.removeEventListener('pointerup', up); host.removeEventListener('pointercancel', cancelPointer); host.removeEventListener('pointerleave', leave);
+      host.removeEventListener('pointermove', drag); host.removeEventListener('pointermove', hover); host.removeEventListener('pointerup', up); host.removeEventListener('pointercancel', cancelPointer);
       host.removeEventListener('keydown', key); canvas.removeEventListener('webglcontextlost', lost);
+      host.removeEventListener('pointerleave', clearHover); canvas.removeEventListener('webglcontextrestored', restored);
+      motion.removeEventListener?.('change', motionChanged);
       window.removeEventListener('resize', queueResize); window.removeEventListener('blur', cancelPointer); document.removeEventListener('visibilitychange', visibility);
-      motion.removeEventListener?.('change', motionChange);
       buttons.forEach(button => button.removeEventListener('click', switchView)); list.replaceChildren();
-      geometry.dispose(); material.dispose();
-      resources.forEach(resource => resource.dispose()); renderer?.dispose();
+      disposeBuild(); geometry.dispose(); material.dispose(); renderer?.dispose();
     },
   };
 }
