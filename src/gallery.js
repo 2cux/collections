@@ -7,11 +7,50 @@ export function wrapSpiralOffset(offset, span) {
   return ((offset + span / 2) % span + span) % span - span / 2;
 }
 
+export const SPIRAL_DEPTH_TUNING = Object.freeze({
+  desktop: Object.freeze({
+    yawStrength: .78,
+    maxYaw: 1.24,
+    pitchAmplitude: .045,
+    rollAmplitude: .095,
+    curveStrength: .055,
+    minimumFocusScale: .84,
+    maximumFocusScale: 1.075,
+    minimumBrightness: .64,
+    maximumBrightness: 1.02,
+    edgeBrightness: .88,
+  }),
+  mobile: Object.freeze({
+    yawStrength: .64,
+    maxYaw: 1.08,
+    pitchAmplitude: .04,
+    rollAmplitude: .085,
+    curveStrength: .045,
+    minimumFocusScale: .88,
+    maximumFocusScale: 1.055,
+    minimumBrightness: .7,
+    maximumBrightness: 1,
+    edgeBrightness: .9,
+  }),
+  compactLandscape: Object.freeze({
+    yawStrength: .64,
+    maxYaw: 1.08,
+    pitchAmplitude: .04,
+    rollAmplitude: .085,
+    curveStrength: .045,
+    minimumFocusScale: .88,
+    maximumFocusScale: 1.055,
+    minimumBrightness: .7,
+    maximumBrightness: 1,
+    edgeBrightness: .9,
+  }),
+});
+
 export const SPIRAL_LAYOUT = {
-  desktop: { radius: 3.85, pitch: 10.4, step: 0.9, width: 3.05, aspect: 1.6, count: 25, cameraShare: 0.29 },
-  mobile: { radius: 2.15, pitch: 9.0, step: 0.94, width: 2.05, aspect: 1.6, count: 23, targetShare: 0.76, cameraMin: 7.0, cameraMax: 12.5, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04 },
-  compactLandscape: { radius: 2.1, pitch: 8.8, step: 0.96, width: 2.0, aspect: 1.6, count: 23, targetShare: 0.66, cameraMin: 3.25, cameraMax: 7.8, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04 },
-  fov: 43, normalDamping: 14, snapDamping: 16, wheelSpeed: .0026, dragSpeed: .009, pixelRatio: 1.75,
+  desktop: { radius: 4.35, pitch: 10.8, step: 0.9, width: 3.05, aspect: 1.6, count: 25, cameraShare: 0.29, depth: SPIRAL_DEPTH_TUNING.desktop },
+  mobile: { radius: 2.35, pitch: 9.2, step: 0.94, width: 2.05, aspect: 1.6, count: 23, targetShare: 0.76, cameraMin: 7.0, cameraMax: 12.5, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04, depth: SPIRAL_DEPTH_TUNING.mobile },
+  compactLandscape: { radius: 2.3, pitch: 9.0, step: 0.96, width: 2.0, aspect: 1.6, count: 23, targetShare: 0.66, cameraMin: 3.25, cameraMax: 7.8, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04, depth: SPIRAL_DEPTH_TUNING.compactLandscape },
+  fov: 48, normalDamping: 14, snapDamping: 16, wheelSpeed: .0026, dragSpeed: .009, pixelRatio: 1.75,
   autoRotation: { speed: 0.11 },
   focus: { minDistance: .15, maxDistance: 2.4, maxBlur: .005 },
 };
@@ -55,9 +94,16 @@ export function normalizeSpiralAngle(angle) {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
-export function calculateSpiralTransform({ offset, radius, pitch, spread = 1 }) {
+export function calculateSpiralTransform({ offset, radius, pitch, spread = 1, depth = SPIRAL_DEPTH_TUNING.desktop }) {
   const angle = offset;
   const wrappedAngle = normalizeSpiralAngle(angle);
+  const yaw = THREE.MathUtils.clamp(
+    wrappedAngle * depth.yawStrength,
+    -depth.maxYaw,
+    depth.maxYaw,
+  );
+  const pitchRotation = Math.sin(angle * .72) * depth.pitchAmplitude;
+  const roll = -Math.sin(angle) * depth.rollAmplitude;
   return {
     angle,
     wrappedAngle,
@@ -67,9 +113,9 @@ export function calculateSpiralTransform({ offset, radius, pitch, spread = 1 }) 
       z: Math.cos(angle) * radius,
     },
     rotation: {
-      pitch: Math.sin(angle) * 0.025,
-      yaw: THREE.MathUtils.clamp(wrappedAngle * 0.28, -0.72, 0.72),
-      roll: -Math.sin(angle) * 0.055,
+      pitch: pitchRotation,
+      yaw,
+      roll,
     },
   };
 }
@@ -84,12 +130,12 @@ export function calculateCameraZ({ radius, cardWidth, viewportAspect, fov, targe
   return radius + distanceFromFrontCard;
 }
 
-export function applyCardTransform(card, transform, { width, aspect = 1.6, tiltX = 0, tiltY = 0, tiltZ = 0 }) {
+export function applyCardTransform(card, transform, { width, aspect = 1.6, curveScale = 1, tiltX = 0, tiltY = 0, tiltZ = 0 }) {
   const cardWidth = width;
   const cardHeight = cardWidth / aspect;
   card.position.set(transform.position.x, transform.position.y, transform.position.z);
   card.rotation.set(transform.rotation.pitch + tiltX, transform.rotation.yaw + tiltY, transform.rotation.roll + tiltZ);
-  card.scale.set(cardWidth, cardHeight, 1);
+  card.scale.set(cardWidth, cardHeight, cardWidth * curveScale);
 }
 
 // Kept as a small compatibility helper for callers that only need angular defocus.
@@ -108,7 +154,7 @@ function colorValue(value) {
   try { return new THREE.Color(value); } catch { return new THREE.Color('#11110f'); }
 }
 
-function applyFocus(surface, cardData, quality) {
+function applyFocus(surface, cardData, quality, depth) {
   const uniforms = {
     spiralBlur: { value: 0 },
     spiralSourceAspect: { value: 1.6 },
@@ -119,6 +165,7 @@ function applyFocus(surface, cardData, quality) {
     spiralMotionAmount: { value: 0 },
     spiralMotionDirection: { value: new THREE.Vector2(0, 0) },
     spiralBlurEnabled: { value: quality.blurSamples > 1 ? 1 : 0 },
+    spiralEdgeBrightness: { value: depth.edgeBrightness },
   };
   surface.userData.blur = uniforms.spiralBlur;
   surface.userData.shaderUniforms = uniforms;
@@ -155,6 +202,7 @@ function applyFocus(surface, cardData, quality) {
       uniform float spiralMotionAmount;
       uniform vec2 spiralMotionDirection;
       uniform float spiralBlurEnabled;
+      uniform float spiralEdgeBrightness;
     `;
     const sampleHelper = `
       vec4 sampleSpiralCard(vec2 cardUv) {
@@ -184,6 +232,13 @@ function applyFocus(surface, cardData, quality) {
         vec2 cardUv = vMapUv;
         vec4 sampledDiffuseColor;
         ${sampleBlock}
+        float horizontalDistance = abs(cardUv.x * 2.0 - 1.0);
+        float curveShade = mix(
+          1.0,
+          spiralEdgeBrightness,
+          smoothstep(0.35, 1.0, horizontalDistance)
+        );
+        sampledDiffuseColor.rgb *= curveShade;
         diffuseColor *= sampledDiffuseColor;
         // The SDF uses physical card coordinates, so portrait corners match
         // landscape corners after the card's non-uniform scale.
@@ -197,7 +252,7 @@ function applyFocus(surface, cardData, quality) {
       #endif
     `);
   };
-  surface.customProgramCacheKey = () => `spiral-focus-rounded-v6-${quality.blurSamples}`;
+  surface.customProgramCacheKey = () => `spiral-focus-rounded-curved-v7-${quality.blurSamples}`;
 }
 
 export function mountGallery(host) {
@@ -271,14 +326,16 @@ export function mountGallery(host) {
   spiralRoot.position.set(-0.12, 0.05, 0);
   scene.add(spiralRoot);
   const camera = new THREE.PerspectiveCamera(SPIRAL_LAYOUT.fov, 1, .1, 100);
-  // 24x8 keeps the shallow transverse bow smooth while reducing vertex work per card.
-  const geometry = new THREE.PlaneGeometry(1, 1, 24, 8);
+  // The shared unit plane uses the desktop bow; compact layouts reduce its
+  // world-space depth through Z scaling without rebuilding every card.
+  const geometry = new THREE.PlaneGeometry(1, 1, 32, 10);
   const positions = geometry.attributes.position;
   for (let i = 0; i < positions.count; i++) {
     const x = positions.getX(i);
-    // A restrained bow keeps the card readable while its edges recede slightly.
-    positions.setZ(i, -.22 * x * x);
+    const normalizedX = x / .5;
+    positions.setZ(i, -SPIRAL_DEPTH_TUNING.desktop.curveStrength * normalizedX * normalizedX);
   }
+  positions.needsUpdate = true;
   geometry.computeVertexNormals(); geometry.computeBoundingSphere();
   const material = new THREE.MeshBasicMaterial({
     side: THREE.FrontSide,
@@ -411,7 +468,7 @@ export function mountGallery(host) {
     cards = gallerySlots(poolSize).map((slot, i) => {
       const group = new THREE.Group();
       const surface = retainResource(material.clone());
-      if (!calibrationMode) applyFocus(surface, slot, quality);
+      if (!calibrationMode) applyFocus(surface, slot, quality, config.depth);
       const fallbackArtwork = artwork[slot.study ?? i % artwork.length];
       const createFallbackTexture = () => {
         const fallbackTexture = new THREE.CanvasTexture(fallbackArtwork);
@@ -512,8 +569,10 @@ export function mountGallery(host) {
       // Small authored depth offsets survive, but cannot pull neighbours into
       // the same physical lane and create an actual mesh intersection.
       const radius = config.radius + THREE.MathUtils.clamp(radialOffset, -.08, .08);
-      const transform = calculateSpiralTransform({ offset, radius, pitch: config.pitch, spread });
-      applyCardTransform(card, transform, { width: config.width * size, aspect, tiltX, tiltY, tiltZ });
+      const depth = config.depth || SPIRAL_DEPTH_TUNING.desktop;
+      const curveScale = depth.curveStrength / SPIRAL_DEPTH_TUNING.desktop.curveStrength;
+      const transform = calculateSpiralTransform({ offset, radius, pitch: config.pitch, spread, depth });
+      applyCardTransform(card, transform, { width: config.width * size, aspect, curveScale, tiltX, tiltY, tiltZ });
       const surface = card.children[0].material;
       card.updateMatrixWorld(true);
       worldPosition.copy(card.position).applyMatrix4(spiralRoot.matrixWorld);
@@ -538,8 +597,8 @@ export function mountGallery(host) {
       }
 
       const focusAmount = calculateFocusAmount(offset, config.step);
-      const focusScale = THREE.MathUtils.lerp(.92, 1.05, focusAmount);
-      const brightness = THREE.MathUtils.lerp(.78, 1, focusAmount);
+      const focusScale = THREE.MathUtils.lerp(depth.minimumFocusScale, depth.maximumFocusScale, focusAmount);
+      const brightness = THREE.MathUtils.lerp(depth.minimumBrightness, depth.maximumBrightness, focusAmount);
       const blur = quality.blurEnabled.value
         ? THREE.MathUtils.clamp((1 - focusAmount) * .004, 0, SPIRAL_LAYOUT.focus.maxBlur)
         : 0;
@@ -563,7 +622,7 @@ export function mountGallery(host) {
         ? THREE.MathUtils.lerp(.72, 1, THREE.MathUtils.clamp((aspect - .75) / .25, 0, 1))
         : 1;
       const cardWidth = config.width * Math.min(1.06, size) * portraitCompensation * focusScale * hoverScale;
-      card.scale.set(cardWidth, cardWidth / aspect, 1);
+      card.scale.set(cardWidth, cardWidth / aspect, cardWidth * curveScale);
       // Move toward the camera in world space. This is kept in the Three.js
       // positioning pass, so it cannot compete with a CSS transform.
       if (hoverProgress > .0001) {
@@ -597,7 +656,7 @@ export function mountGallery(host) {
       card.updateMatrixWorld(true);
       cardNormal.set(0, 0, 1).transformDirection(card.matrixWorld);
       cameraToCard.copy(camera.position).sub(worldPosition).normalize();
-      const isFacingCamera = cardNormal.dot(cameraToCard) > .16;
+      const isFacingCamera = cardNormal.dot(cameraToCard) > .10;
       // Meshes are opaque, so focus brightness is the real visibility proxy.
       // The front-facing check keeps rear cards from winning raycasts through
       // visual overlaps.
