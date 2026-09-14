@@ -8,10 +8,11 @@ export function wrapSpiralOffset(offset, span) {
 }
 
 export const SPIRAL_LAYOUT = {
-  desktop: { radius: 3.7, pitch: 9.2, step: 0.76, width: 3.2, aspect: 1.6, count: 25, cameraShare: 0.29 },
-  mobile: { radius: 2.0, pitch: 7.6, step: 0.76, width: 2.3, aspect: 1.6, count: 23, targetShare: 0.76, cameraMin: 7.0, cameraMax: 12.5, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04 },
-  compactLandscape: { radius: 1.85, pitch: 7.2, step: 0.76, width: 2.3, aspect: 1.6, count: 23, targetShare: 0.66, cameraMin: 3.25, cameraMax: 7.8, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04 },
-  fov: 43, normalDamping: 10, snapDamping: 14, wheelSpeed: .0017, dragSpeed: .007, pixelRatio: 1.75,
+  desktop: { radius: 3.85, pitch: 10.4, step: 0.9, width: 3.05, aspect: 1.6, count: 25, cameraShare: 0.29 },
+  mobile: { radius: 2.15, pitch: 9.0, step: 0.94, width: 2.05, aspect: 1.6, count: 23, targetShare: 0.76, cameraMin: 7.0, cameraMax: 12.5, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04 },
+  compactLandscape: { radius: 2.1, pitch: 8.8, step: 0.96, width: 2.0, aspect: 1.6, count: 23, targetShare: 0.66, cameraMin: 3.25, cameraMax: 7.8, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04 },
+  fov: 43, normalDamping: 14, snapDamping: 16, wheelSpeed: .0026, dragSpeed: .009, pixelRatio: 1.75,
+  autoRotation: { speed: 0.11 },
   focus: { minDistance: .15, maxDistance: 2.4, maxBlur: .005 },
 };
 
@@ -28,6 +29,10 @@ export const QUALITY_PRESETS = Object.freeze({
 
 const SNAP_DELAY = 150;
 const SNAP_EPSILON = .0005;
+const POINTER_DRAG_THRESHOLD = 6;
+const AUTO_RESUME_BLEND_DURATION = 350;
+const AUTO_RESUME_DELAYS = Object.freeze({ pointer: 280, touch: 280, wheel: 220, keyboard: 280, hover: 180 });
+const HOVER_RESUME_BLEND_DURATION = 320;
 
 function isCompactViewport(width, height) {
   const shortEdge = Math.min(width, height);
@@ -208,8 +213,10 @@ export function mountGallery(host) {
     current: 0,
     target: 0,
     velocity: 0,
+    autoVelocity: 0,
     isDragging: false,
     isReceivingWheel: false,
+    snapRequested: false,
     isSnapping: false,
     snapTarget: null,
     lastInputTime: 0,
@@ -224,10 +231,14 @@ export function mountGallery(host) {
   };
   let renderer, config, cards = [], resources = new Set(), resourceRefs = new Map(), frame = 0, last = 0, buildVersion = 0;
   let enabled = false, disposed = false, pointer = null, pointerY = 0;
+  let isInteracting = false, lastInteractionTime = 0, autoResumeProgress = 1, lastInputType = 'pointer';
   let previousCurrent = 0, inputVelocity = 0, pointerStartX = 0, pointerStartY = 0, pointerDragged = false;
   let compactLayout = false, viewportWidth = 0, viewportHeight = 0, resizeFrame = 0;
-  let dirty = true, previousReveal = -1, listMode = false, calibrationLogKey = '', hoverTimer = 0, lastHoverRaycast = 0;
+  let dirty = true, previousReveal = -1, listMode = false, calibrationLogKey = '', hoverTimer = 0, hoverLeaveTimer = 0, lastHoverRaycast = 0;
   let hoveredCard = null, contextLost = false;
+  // Hover is deliberately a multiplier rather than another rotation system:
+  // the current angle remains untouched while automatic motion coasts to zero.
+  let hoverPauseTarget = 1, hoverPauseFactor = 1;
   const quality = { level: 'high', ...QUALITY_PRESETS.high, blurEnabled: { value: calibrationMode ? 0 : 1 } };
   const artwork = studyNames.map((_, i) => createArtwork(i));
   [...fallback.children].forEach((card, i) => { card.style.backgroundImage = `url(${artwork[i % artwork.length].toDataURL()})`; });
@@ -275,17 +286,33 @@ export function mountGallery(host) {
   geometry.computeVertexNormals(); geometry.computeBoundingSphere();
   const material = new THREE.MeshBasicMaterial({
     side: THREE.FrontSide,
-    transparent: !calibrationMode,
-    alphaTest: .05,
+    transparent: false,
+    alphaTest: .08,
+    alphaToCoverage: true,
   });
   const projectedPosition = new THREE.Vector3();
   const worldPosition = new THREE.Vector3();
   const projectedTangent = new THREE.Vector3();
   const tangentPosition = new THREE.Vector3();
+  const cameraToCard = new THREE.Vector3();
+  const cardNormal = new THREE.Vector3();
+  const tooltipPoint = new THREE.Vector3();
+  const tooltipCorners = [
+    new THREE.Vector3(-.5, -.5, 0), new THREE.Vector3(-.5, .5, 0),
+    new THREE.Vector3(.5, -.5, 0), new THREE.Vector3(.5, .5, 0),
+  ];
   const clickableMeshes = [];
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
   let hoverX = 0, hoverY = 0;
+  const tooltip = document.createElement('div');
+  tooltip.className = 'project-tooltip';
+  tooltip.setAttribute('aria-hidden', 'true');
+  const tooltipIndex = document.createElement('span'); tooltipIndex.className = 'project-tooltip-index';
+  const tooltipTitle = document.createElement('strong'); tooltipTitle.className = 'project-tooltip-title';
+  const tooltipAction = document.createElement('span'); tooltipAction.className = 'project-tooltip-action'; tooltipAction.textContent = 'VIEW PROJECT';
+  tooltip.append(tooltipIndex, tooltipTitle, tooltipAction);
+  shell.append(tooltip);
 
   function retainResource(resource) {
     if (!resource || typeof resource.dispose !== 'function') return resource;
@@ -384,7 +411,10 @@ export function mountGallery(host) {
           });
         }
       }
-      surface.transparent = !calibrationMode;
+      // Keep the card body opaque. Semi-transparent cards with depthWrite and
+      // a changing renderOrder visibly swap through each other at the focus
+      // hand-off. Alpha test is sufficient for the rounded silhouette.
+      surface.transparent = false;
       surface.opacity = 1;
       surface.depthTest = true;
       surface.depthWrite = true;
@@ -451,10 +481,13 @@ export function mountGallery(host) {
       const offset = wrapSpiralOffset(baseOffset + motionState.current, cards.length * config.step);
       const cardData = calibrationMode ? calibrationCardDefaults : card.userData;
       const { aspect, size, radialOffset, tiltX, tiltY, tiltZ } = cardData;
-      const radius = config.radius + radialOffset;
+      // Small authored depth offsets survive, but cannot pull neighbours into
+      // the same physical lane and create an actual mesh intersection.
+      const radius = config.radius + THREE.MathUtils.clamp(radialOffset, -.08, .08);
       const transform = calculateSpiralTransform({ offset, radius, pitch: config.pitch, spread });
       applyCardTransform(card, transform, { width: config.width * size, aspect, tiltX, tiltY, tiltZ });
       const surface = card.children[0].material;
+      card.updateMatrixWorld(true);
       worldPosition.copy(card.position).applyMatrix4(spiralRoot.matrixWorld);
       const projected = projectedPosition.copy(worldPosition).project(camera);
       const absoluteOffset = Math.abs(offset);
@@ -477,25 +510,40 @@ export function mountGallery(host) {
       }
 
       const focusAmount = calculateFocusAmount(offset, config.step);
-      const focusScale = THREE.MathUtils.lerp(.9, 1.07, focusAmount);
+      const focusScale = THREE.MathUtils.lerp(.92, 1.05, focusAmount);
       const brightness = THREE.MathUtils.lerp(.78, 1, focusAmount);
-      const opacity = THREE.MathUtils.lerp(.72, 1, focusAmount);
       const blur = quality.blurEnabled.value
         ? THREE.MathUtils.clamp((1 - focusAmount) * .004, 0, SPIRAL_LAYOUT.focus.maxBlur)
         : 0;
       card.userData.focusAmount = focusAmount;
       card.visible = projected.z > -1.08 && projected.z < 1.08 && Math.abs(projected.x) < 1.45 && Math.abs(projected.y) < 1.45;
       card.renderOrder = 0;
-      // The actual Mesh receives a distance-derived order. The Group's
-      // renderOrder is intentionally left neutral because Three.js sorts the
-      // drawable child, not an enclosing Group.
-      card.children[0].renderOrder = Math.round(1000 - worldPosition.distanceTo(camera.position) * 10);
+      // Opaque cards use the real depth buffer. A distance-derived renderOrder
+      // flips as two cards cross and looks like geometry passing through.
+      card.children[0].renderOrder = 0;
       surface.userData.blur.value = blur;
-      const hoverScale = card === hoveredCard ? 1.015 : 1;
-      surface.color.setScalar(brightness * (card === hoveredCard ? 1.03 : 1));
-      surface.opacity = opacity;
-      const cardWidth = config.width * Math.min(1.1, size * focusScale * hoverScale);
+      const hoverProgress = card.userData.hoverProgress || 0;
+      const hoverScale = 1 + .035 * hoverProgress;
+      surface.color.setScalar(brightness * (1 + .06 * hoverProgress));
+      surface.opacity = 1;
+      surface.transparent = false;
+      surface.depthTest = true;
+      surface.depthWrite = true;
+      // Portrait work receives a narrower plane so its much larger height
+      // cannot cut through the cards immediately above and below it.
+      const portraitCompensation = aspect < 1
+        ? THREE.MathUtils.lerp(.72, 1, THREE.MathUtils.clamp((aspect - .75) / .25, 0, 1))
+        : 1;
+      const cardWidth = config.width * Math.min(1.06, size) * portraitCompensation * focusScale * hoverScale;
       card.scale.set(cardWidth, cardWidth / aspect, 1);
+      // Move toward the camera in world space. This is kept in the Three.js
+      // positioning pass, so it cannot compete with a CSS transform.
+      if (hoverProgress > .0001) {
+        const worldUnitsPerPixel = 2 * camera.position.distanceTo(worldPosition)
+          * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.max(1, viewportHeight);
+        cameraToCard.copy(camera.position).sub(worldPosition).normalize();
+        card.position.add(cameraToCard.multiplyScalar(24 * worldUnitsPerPixel * hoverProgress));
+      }
       const uniforms = surface.userData.shaderUniforms;
       if (uniforms) {
         const speedFactor = quality.motionBlur && !motion.matches
@@ -518,7 +566,15 @@ export function mountGallery(host) {
           uniforms.spiralMotionDirection.value.set(0, 0);
         }
       }
-      if (card.visible && card.userData.link && !card.userData.placeholder) clickableMeshes.push(card.children[0]);
+      card.updateMatrixWorld(true);
+      cardNormal.set(0, 0, 1).transformDirection(card.matrixWorld);
+      cameraToCard.copy(camera.position).sub(worldPosition).normalize();
+      const isFacingCamera = cardNormal.dot(cameraToCard) > .16;
+      // Meshes are opaque, so focus brightness is the real visibility proxy.
+      // The front-facing check keeps rear cards from winning raycasts through
+      // visual overlaps.
+      card.userData.isInteractive = card.visible && brightness > .45 && isFacingCamera;
+      if (card.userData.isInteractive) clickableMeshes.push(card.children[0]);
     });
     updateActiveCard(closestCardIndex);
     if (grid) {
@@ -526,6 +582,7 @@ export function mountGallery(host) {
       else grid.style.transform = `translate3d(${Math.sin(motionState.current * .5) * 2}px, ${THREE.MathUtils.clamp(motionState.current * .2, -3, 3)}px, 0)`;
     }
     renderer?.render(scene, camera);
+    updateTooltipPosition();
     logCalibrationMetrics();
   }
   function normalizeTravel(span) {
@@ -535,6 +592,7 @@ export function mountGallery(host) {
     if (Math.abs(distance) < SNAP_EPSILON) return;
     motionState.current = normalized;
     motionState.target -= distance;
+    previousCurrent -= distance;
     if (motionState.snapTarget !== null) motionState.snapTarget -= distance;
   }
   function startSnap() {
@@ -547,6 +605,7 @@ export function mountGallery(host) {
     motionState.snapTarget = snapTarget;
     motionState.target = snapTarget;
     motionState.isReceivingWheel = false;
+    motionState.snapRequested = false;
     motionState.isSnapping = Math.abs(snapTarget - motionState.current) > SNAP_EPSILON;
     if (!motionState.isSnapping) finishSnap();
   }
@@ -558,23 +617,76 @@ export function mountGallery(host) {
     motionState.isSnapping = false;
     motionState.snapTarget = null;
     motionState.isReceivingWheel = false;
+    motionState.snapRequested = false;
   }
+
+  function beginInteraction(type, now = performance.now()) {
+    isInteracting = true;
+    lastInputType = type;
+    lastInteractionTime = now;
+    autoResumeProgress = 0;
+    motionState.autoVelocity = 0;
+  }
+
+  function recordInteraction(type, now = performance.now()) {
+    lastInputType = type;
+    lastInteractionTime = now;
+    autoResumeProgress = 0;
+    motionState.autoVelocity = 0;
+  }
+
+  function endInteraction(type, now = performance.now()) {
+    isInteracting = false;
+    recordInteraction(type, now);
+  }
+
+  function canAutoRotate() {
+    return enabled
+      && !calibrationMode
+      && !listMode
+      && !motion.matches
+      && !isInteracting
+      && !hoveredCard
+      && !motionState.isSnapping;
+  }
+
   function tick(time) {
     frame = 0;
     if (disposed || document.hidden || !renderer || canvas.hidden) return;
     const dt = Math.min((time - (last || time)) / 1000, .05); last = time;
+    const hoverEase = 1 - Math.exp(-(dt * 1000) / 55);
+    hoverPauseFactor += (hoverPauseTarget - hoverPauseFactor) * hoverEase;
+    if (hoverPauseTarget === 0 && hoverPauseFactor < .001) hoverPauseFactor = 0;
+    if (hoverPauseTarget === 1 && hoverPauseFactor > .999) hoverPauseFactor = 1;
+    let hoverAnimating = false;
+    cards.forEach(card => {
+      const target = card === hoveredCard ? 1 : 0;
+      const duration = target ? 260 : 220;
+      const ease = 1 - Math.exp(-(dt * 1000) / (duration / 3));
+      const next = (card.userData.hoverProgress || 0) + (target - (card.userData.hoverProgress || 0)) * ease;
+      card.userData.hoverProgress = Math.abs(target - next) < .001 ? target : next;
+      hoverAnimating ||= card.userData.hoverProgress > .001 && card.userData.hoverProgress < .999;
+    });
     if (calibrationMode) {
       motionState.current = 0;
       motionState.target = 0;
       motionState.velocity = 0;
+      motionState.autoVelocity = 0;
       motionState.isReceivingWheel = false;
+      motionState.snapRequested = false;
       motionState.isSnapping = false;
       motionState.snapTarget = null;
     }
     const span = cards.length * config.step;
     if (!motionState.isSnapping) normalizeTravel(span);
-    if (!calibrationMode && motionState.isReceivingWheel && !motionState.isDragging && !motionState.isSnapping && time - motionState.lastInputTime >= SNAP_DELAY) startSnap();
-    const moving = Math.abs(motionState.target - motionState.current) > .0001;
+    if (!calibrationMode && motionState.isReceivingWheel && !motionState.isDragging && !motionState.isSnapping && time - motionState.lastInputTime >= SNAP_DELAY) {
+      // Wheel and pointer input remain continuous: a tiny movement must not be
+      // rounded back to the previous card. Only discrete keyboard navigation
+      // asks for a centred snap.
+      if (motionState.snapRequested) startSnap();
+      else motionState.isReceivingWheel = false;
+    }
+    let moving = Math.abs(motionState.target - motionState.current) > .0001;
     if (moving) {
       const damping = motion.matches
         ? 100
@@ -582,6 +694,26 @@ export function mountGallery(host) {
       motionState.current = THREE.MathUtils.damp(motionState.current, motionState.target, damping, dt);
     } else {
       motionState.current = motionState.target;
+    }
+
+    if (canAutoRotate()) {
+      const idleTime = time - lastInteractionTime;
+      const resumeDelay = AUTO_RESUME_DELAYS[lastInputType] ?? AUTO_RESUME_DELAYS.pointer;
+      const resumeElapsed = Math.max(0, idleTime - resumeDelay);
+      const duration = lastInputType === 'hover' ? HOVER_RESUME_BLEND_DURATION : AUTO_RESUME_BLEND_DURATION;
+      const t = Math.min(1, resumeElapsed / duration);
+      autoResumeProgress = t * t * (3 - 2 * t);
+      motionState.autoVelocity = SPIRAL_LAYOUT.autoRotation.speed * autoResumeProgress * hoverPauseFactor;
+    } else {
+      autoResumeProgress = 0;
+      motionState.autoVelocity = 0;
+    }
+    const autoMoving = Math.abs(motionState.autoVelocity) > .00001;
+    if (autoMoving) {
+      const autoDelta = motionState.autoVelocity * dt;
+      motionState.current += autoDelta;
+      motionState.target = motionState.current;
+      moving = true;
     }
     // Keep long sessions numerically stable without changing the easing distance.
     if (!motionState.isSnapping) normalizeTravel(span);
@@ -594,15 +726,76 @@ export function mountGallery(host) {
     previousCurrent = motionState.current;
     previousReveal = state.reveal; dirty = false;
     const waitingForSnap = motionState.isReceivingWheel && !motionState.isDragging && !motionState.isSnapping;
-    if (moving || waitingForSnap || motionState.isSnapping || state.reveal > 0 && state.reveal < 1) wake();
+    const autoPending = enabled && !calibrationMode && !listMode && !motion.matches;
+    if (moving || hoverAnimating || waitingForSnap || motionState.isSnapping || autoMoving || autoPending || state.reveal > 0 && state.reveal < 1) wake();
   }
   function wake() {
     if (!frame && !disposed && !document.hidden && renderer && !canvas.hidden) frame = requestAnimationFrame(tick);
   }
 
-  function clearHover() {
+  function showTooltip(card) {
+    tooltipIndex.textContent = String((card.userData.projectIndex ?? 0) + 1).padStart(2, '0');
+    tooltipTitle.textContent = card.userData.title || 'Untitled Project';
+    tooltip.classList.add('is-visible');
+    tooltip.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeProjectTooltip() {
+    tooltip.classList.remove('is-visible');
+    tooltip.setAttribute('aria-hidden', 'true');
+  }
+
+  function updateTooltipPosition() {
+    if (!hoveredCard || !tooltip.classList.contains('is-visible')) return;
+    let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+    tooltipCorners.forEach(corner => {
+      tooltipPoint.copy(corner).applyMatrix4(hoveredCard.children[0].matrixWorld).project(camera);
+      const x = (tooltipPoint.x + 1) * viewportWidth / 2;
+      const y = (1 - tooltipPoint.y) * viewportHeight / 2;
+      left = Math.min(left, x); right = Math.max(right, x);
+      top = Math.min(top, y); bottom = Math.max(bottom, y);
+    });
+    if (!Number.isFinite(left)) return;
+    const margin = 16;
+    const bounds = tooltip.getBoundingClientRect();
+    let x = right + 16;
+    let y = bottom - 72;
+    if (x + bounds.width > window.innerWidth - margin) x = left - bounds.width - 16;
+    if (y + bounds.height > window.innerHeight - margin) y = window.innerHeight - bounds.height - margin;
+    if (y < margin) y = margin;
+    tooltip.style.setProperty('--tooltip-x', `${Math.round(x)}px`);
+    tooltip.style.setProperty('--tooltip-y', `${Math.round(y)}px`);
+  }
+
+  function scheduleAutoRotationResume() {
+    if (hoveredCard || isInteracting) return;
+    hoverPauseTarget = 1;
+    recordInteraction('hover');
+  }
+
+  function setHoveredCard(card) {
+    if (card === hoveredCard) return;
+    if (hoverLeaveTimer) { clearTimeout(hoverLeaveTimer); hoverLeaveTimer = 0; }
+    hoveredCard = card;
+    hoverPauseTarget = 0;
+    showTooltip(card);
+    host.style.cursor = card.userData.link && !card.userData.placeholder ? 'pointer' : 'grab';
+    dirty = true; wake();
+  }
+
+  function clearHover({ defer = false } = {}) {
     if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = 0; }
-    if (hoveredCard) { hoveredCard = null; dirty = true; wake(); }
+    if (hoverLeaveTimer) { clearTimeout(hoverLeaveTimer); hoverLeaveTimer = 0; }
+    const finish = () => {
+      hoverLeaveTimer = 0;
+      if (!hoveredCard) return;
+      hoveredCard = null;
+      closeProjectTooltip();
+      scheduleAutoRotationResume();
+      dirty = true; wake();
+    };
+    if (defer && hoveredCard) hoverLeaveTimer = window.setTimeout(finish, 40);
+    else finish();
     host.style.removeProperty('cursor');
   }
 
@@ -625,14 +818,14 @@ export function mountGallery(host) {
     lastHoverRaycast = performance.now();
     const hit = raycastAt({ clientX: hoverX, clientY: hoverY });
     const nextCard = hit?.object?.parent || null;
-    if (nextCard !== hoveredCard) { hoveredCard = nextCard; dirty = true; wake(); }
-    if (hoveredCard) host.style.cursor = 'pointer'; else host.style.removeProperty('cursor');
+    if (nextCard) setHoveredCard(nextCard);
+    else clearHover({ defer: true });
   }
 
   function hover(event) {
     if (!precisePointer.matches || !enabled || listMode) return;
     hoverX = event.clientX; hoverY = event.clientY;
-    if (motionState.isDragging) { clearHover(); return; }
+    if (motionState.isDragging) return;
     const now = performance.now();
     const remaining = 32 - (now - lastHoverRaycast);
     if (remaining <= 0) runHoverRaycast();
@@ -711,14 +904,16 @@ export function mountGallery(host) {
     last = 0;
     dirty = true; wake();
   }
-  function move(delta) {
+  function move(delta, { snap = false, inputType = 'pointer' } = {}) {
     if (calibrationMode || !Number.isFinite(delta) || delta === 0) return;
     const now = performance.now();
+    recordInteraction(inputType, now);
     const elapsed = Math.max(.016, (now - (motionState.lastInputTime || now - 16)) / 1000);
     // inputVelocity is release-only input speed; motionState.velocity is rendered speed.
     inputVelocity = THREE.MathUtils.clamp(delta / elapsed, -6, 6);
     motionState.lastInputTime = now;
     motionState.isReceivingWheel = true;
+    motionState.snapRequested = snap;
     motionState.isSnapping = false;
     motionState.snapTarget = null;
     motionState.target += delta;
@@ -728,15 +923,26 @@ export function mountGallery(host) {
     if (calibrationMode || !enabled || listMode || event.ctrlKey) return;
     event.preventDefault();
     const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewportHeight : 1);
-    move(THREE.MathUtils.clamp(pixels, -140, 140) * SPIRAL_LAYOUT.wheelSpeed);
+    const clampedPixels = THREE.MathUtils.clamp(pixels, -140, 140);
+    // Give precision wheels and trackpads extra gain near zero. The old snap
+    // rounded these small deltas away, which made the first part of a gesture
+    // appear completely unresponsive.
+    const responsivePixels = Math.sign(clampedPixels) * (
+      Math.abs(clampedPixels) < 24
+        ? Math.abs(clampedPixels) * 1.75
+        : 42 + Math.abs(clampedPixels) - 24
+    );
+    isInteracting = false;
+    move(responsivePixels * SPIRAL_LAYOUT.wheelSpeed, { snap: false, inputType: 'wheel' });
   }
   function down(event) {
     if (calibrationMode || !enabled || listMode || event.button !== 0 || !event.isPrimary) return;
     host.focus({ preventScroll: true });
-    clearHover();
     const now = performance.now();
+    beginInteraction(event.pointerType === 'touch' ? 'touch' : 'pointer', now);
     motionState.isDragging = true;
     motionState.isReceivingWheel = true;
+    motionState.snapRequested = false;
     motionState.isSnapping = false;
     motionState.snapTarget = null;
     motionState.velocity = 0;
@@ -748,12 +954,17 @@ export function mountGallery(host) {
   function drag(event) {
     if (calibrationMode || !enabled) return;
     if (event.pointerId !== pointer || !motionState.isDragging) return;
-    if (!pointerDragged && Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY) > 8) {
+    recordInteraction(event.pointerType === 'touch' ? 'touch' : 'pointer');
+    hoverX = event.clientX; hoverY = event.clientY;
+    if (!pointerDragged && Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY) > POINTER_DRAG_THRESHOLD) {
       pointerDragged = true;
       clearHover();
     }
     if (!pointerDragged) return;
-    move((pointerY - event.clientY) * SPIRAL_LAYOUT.dragSpeed); pointerY = event.clientY;
+    move((pointerY - event.clientY) * SPIRAL_LAYOUT.dragSpeed, {
+      snap: false,
+      inputType: event.pointerType === 'touch' ? 'touch' : 'pointer',
+    }); pointerY = event.clientY;
   }
   function endPointerInput(withInertia = true, event = null) {
     const wasPointerActive = motionState.isDragging || pointer !== null;
@@ -762,7 +973,10 @@ export function mountGallery(host) {
       if (withInertia && !motion.matches) motionState.target += THREE.MathUtils.clamp(inputVelocity * .045, -config.step * .35, config.step * .35);
       motionState.isDragging = false;
       motionState.isReceivingWheel = true;
-      motionState.lastInputTime = performance.now();
+      motionState.snapRequested = false;
+      const now = performance.now();
+      motionState.lastInputTime = now;
+      endInteraction(lastInputType, now);
       motionState.isSnapping = false;
       motionState.snapTarget = null;
     }
@@ -771,6 +985,10 @@ export function mountGallery(host) {
     pointer = null;
     pointerDragged = false;
     inputVelocity = 0;
+    if (event && precisePointer.matches && enabled && !listMode) {
+      hoverX = event.clientX; hoverY = event.clientY;
+      window.setTimeout(runHoverRaycast, 0);
+    }
     wake();
   }
   function up(event = null) {
@@ -790,23 +1008,29 @@ export function mountGallery(host) {
     }
     if (!['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    if (event.key === 'Home') { motionState.target = 0; motionState.lastInputTime = performance.now(); motionState.isReceivingWheel = true; motionState.isSnapping = false; motionState.snapTarget = null; wake(); return; }
-    if (event.key === 'End') { motionState.target = Math.floor(cards.length / 2) * config.step; motionState.lastInputTime = performance.now(); motionState.isReceivingWheel = true; motionState.isSnapping = false; motionState.snapTarget = null; wake(); return; }
+    const now = performance.now();
+    beginInteraction('keyboard', now);
+    if (event.key === 'Home') { motionState.target = 0; motionState.lastInputTime = now; motionState.isReceivingWheel = true; motionState.snapRequested = true; motionState.isSnapping = false; motionState.snapTarget = null; endInteraction('keyboard', now); wake(); return; }
+    if (event.key === 'End') { motionState.target = Math.floor(cards.length / 2) * config.step; motionState.lastInputTime = now; motionState.isReceivingWheel = true; motionState.snapRequested = true; motionState.isSnapping = false; motionState.snapTarget = null; endInteraction('keyboard', now); wake(); return; }
     const steps = event.key.startsWith('Page') ? 3 : 1;
     const direction = event.key.includes('Down') ? 1 : -1;
     motionState.target = Math.round(motionState.target / config.step) * config.step + direction * config.step * steps;
-    motionState.lastInputTime = performance.now();
+    motionState.lastInputTime = now;
     motionState.isReceivingWheel = true;
+    motionState.snapRequested = true;
     motionState.isSnapping = false;
     motionState.snapTarget = null;
+    endInteraction('keyboard', now);
     wake();
   }
   function visibility() {
     if (document.hidden) { cancelPointer(); clearHover(); }
     inputVelocity = 0; motionState.velocity = 0;
+    motionState.autoVelocity = 0;
     cancelAnimationFrame(frame); frame = 0; last = 0; previousCurrent = motionState.current;
-    if (!document.hidden) { dirty = true; wake(); }
+    if (!document.hidden) { endInteraction(lastInputType); dirty = true; wake(); }
   }
+  function stagePointerLeave() { clearHover({ defer: true }); }
   let resumeAfterContextRestore = false;
   function lost(event) {
     event.preventDefault();
@@ -833,7 +1057,7 @@ export function mountGallery(host) {
   host.addEventListener('wheel', wheel, { passive: false });
   host.addEventListener('pointerdown', down); host.addEventListener('pointermove', drag); host.addEventListener('pointermove', hover);
   host.addEventListener('pointerup', up); host.addEventListener('pointercancel', cancelPointer); host.addEventListener('keydown', key);
-  host.addEventListener('pointerleave', clearHover);
+  host.addEventListener('pointerleave', stagePointerLeave);
   canvas.addEventListener('webglcontextlost', lost); canvas.addEventListener('webglcontextrestored', restored);
   motion.addEventListener?.('change', motionChanged);
   window.addEventListener('resize', queueResize); window.addEventListener('blur', cancelPointer); document.addEventListener('visibilitychange', visibility);
@@ -842,19 +1066,24 @@ export function mountGallery(host) {
     state, motionState, update() { dirty = true; wake(); },
     enable(value) {
       enabled = value && !!renderer && !canvas.hidden;
+      if (enabled) endInteraction(lastInputType);
       if (!value) {
         cancelPointer();
         motionState.isReceivingWheel = false;
         motionState.isSnapping = false;
+        motionState.snapRequested = false;
         motionState.snapTarget = null;
         motionState.velocity = 0;
+        motionState.autoVelocity = 0;
         inputVelocity = 0;
       }
       host.dataset.interactive = String(enabled && !calibrationMode);
+      if (enabled) wake();
     },
     reset() {
       enabled = false; cancelPointer(); clearHover(); motionState.current = motionState.target = calibrationMode ? 0 : 0; motionState.velocity = 0;
-      motionState.isDragging = false; motionState.isReceivingWheel = false; motionState.isSnapping = false; motionState.snapTarget = null; motionState.lastInputTime = 0;
+      motionState.isDragging = false; motionState.isReceivingWheel = false; motionState.snapRequested = false; motionState.isSnapping = false; motionState.snapTarget = null; motionState.lastInputTime = 0;
+      motionState.autoVelocity = 0; isInteracting = false; lastInteractionTime = performance.now(); autoResumeProgress = 0;
       state.reveal = calibrationMode ? 1 : 0;
       cards.forEach(card => { card.userData.isActive = false; });
       state.activeIndex = 0; state.activeCardIndex = -1; state.activeProject = null; host.setAttribute('aria-label', baseStageLabel);
@@ -866,11 +1095,11 @@ export function mountGallery(host) {
       host.removeEventListener('wheel', wheel); host.removeEventListener('pointerdown', down);
       host.removeEventListener('pointermove', drag); host.removeEventListener('pointermove', hover); host.removeEventListener('pointerup', up); host.removeEventListener('pointercancel', cancelPointer);
       host.removeEventListener('keydown', key); canvas.removeEventListener('webglcontextlost', lost);
-      host.removeEventListener('pointerleave', clearHover); canvas.removeEventListener('webglcontextrestored', restored);
+      host.removeEventListener('pointerleave', stagePointerLeave); canvas.removeEventListener('webglcontextrestored', restored);
       motion.removeEventListener?.('change', motionChanged);
       window.removeEventListener('resize', queueResize); window.removeEventListener('blur', cancelPointer); document.removeEventListener('visibilitychange', visibility);
       buttons.forEach(button => button.removeEventListener('click', switchView)); list.replaceChildren();
-      disposeBuild(); geometry.dispose(); material.dispose(); renderer?.dispose();
+      tooltip.remove(); disposeBuild(); geometry.dispose(); material.dispose(); renderer?.dispose();
     },
   };
 }
