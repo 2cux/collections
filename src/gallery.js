@@ -324,17 +324,21 @@ export function mountGallery(host) {
   // Generated artwork is encoded once here, rather than on every list hover.
   const normalizedEntries = entries.map((entry, index) => ({
     ...entry,
-    previewSource: entry.cover || artworkSources[entry.study ?? index % artwork.length],
+    previewSource: entry.previewSource || entry.image || entry.cover || entry.thumbnail || entry.artworkUrl || artworkSources[entry.study ?? index % artwork.length],
   }));
   const LIST_PREVIEW_MOTION = {
-    revealDuration: 560, outgoingDuration: 340, closeDuration: 280, leaveDelay: 70,
+    revealDuration: 560, outgoingDuration: 320, closeDuration: 280, leaveDelay: 90,
     revealEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
     exitEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
   };
+  // The scrollable index intentionally owns only project names. Keeping the
+  // fixed preview outside it prevents overflow clipping in every browser.
+  const listScroll = document.createElement('div');
+  listScroll.className = 'gallery-list-scroll';
   const listDimmer = document.createElement('div');
   listDimmer.className = 'gallery-list-dimmer'; listDimmer.setAttribute('aria-hidden', 'true');
   const preview = document.createElement('div');
-  preview.className = 'gallery-list-preview'; preview.setAttribute('aria-hidden', 'true');
+  preview.className = 'gallery-list-preview'; preview.hidden = true; preview.setAttribute('aria-hidden', 'true');
   const previewLayers = [0, 1].map(index => {
     const layer = document.createElement('div');
     layer.className = `gallery-list-preview-layer gallery-list-preview-layer-${index ? 'b' : 'a'}`;
@@ -350,15 +354,28 @@ export function mountGallery(host) {
     const title = document.createElement('span'); title.className = 'gallery-list-project-title'; title.textContent = entry.title;
     project.append(title); listIndex.append(project);
   });
-  list.append(listDimmer, preview, listIndex);
-  let visiblePreviewLayer = 0, activeListProjectIndex = -1, listPreviewTransitionId = 0, previewIsVisible = false;
-  let listPreviewCloseTimer = 0, listPreviewPositionFrame = 0;
+  listScroll.append(listIndex);
+  list.append(listScroll);
+  shell.append(listDimmer, preview);
+  const listPreviewState = {
+    desiredIndex: -1,
+    displayedIndex: -1,
+    activeLayer: 0,
+    transitionSerial: 0,
+    leaveTimer: 0,
+    disposed: false,
+    visible: false,
+  };
+  let listPreviewPositionFrame = 0;
 
   function finishAndCancelAnimations(element) {
     element.getAnimations().forEach(animation => {
       try { animation.commitStyles?.(); } catch { /* Some browsers cannot commit cancelled animations. */ }
       animation.cancel();
     });
+  }
+  function resolveProjectPreviewSource(entry, index) {
+    return entry.previewSource || entry.image || entry.cover || entry.thumbnail || entry.artworkUrl || artworkSources[entry.study ?? index % artworkSources.length] || '';
   }
   function setPreviewImage(layer, entry) {
     const image = layer.querySelector('img');
@@ -368,100 +385,183 @@ export function mountGallery(host) {
     preview.style.setProperty('--preview-aspect', String(entry.aspect || 1.6));
     return image;
   }
+  function ensurePreviewStageVisible() {
+    preview.hidden = false;
+    preview.classList.add('is-visible');
+    preview.style.display = 'block';
+    preview.style.visibility = 'visible';
+    preview.style.opacity = '1';
+    preview.setAttribute('aria-hidden', 'false');
+  }
+  function resetPreviewLayer(layer) {
+    finishAndCancelAnimations(layer);
+    layer.style.display = 'block';
+    layer.style.visibility = 'visible';
+    layer.style.opacity = '1';
+    layer.style.clipPath = 'inset(50% 50% 50% 50% round 18px)';
+    layer.style.transform = 'translateZ(0) scale(.985)';
+    layer.style.willChange = 'clip-path, opacity, transform';
+  }
+  function positionListPreview(project) {
+    const rect = project.getBoundingClientRect();
+    const width = Math.min(window.innerWidth * .32, 520);
+    const height = width / (normalizedEntries[Number(project.dataset.projectIndex)]?.aspect || 1.6);
+    let left = rect.left + rect.width / 2 - width / 2;
+    let top = rect.top - height - 28;
+    if (top < 24) top = rect.bottom + 28;
+    left = Math.max(24, Math.min(left, window.innerWidth - width - 24));
+    top = Math.max(24, Math.min(top, window.innerHeight - height - 24));
+    preview.style.width = `${Math.round(width)}px`;
+    preview.style.height = `${Math.round(height)}px`;
+    preview.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+  }
   function updateActivePreviewPosition() {
     listPreviewPositionFrame = 0;
     const active = listIndex.querySelector('.gallery-list-project.is-active');
     if (!active || !listMode) return;
-    const rect = active.getBoundingClientRect();
-    if (rect.bottom <= 0 || rect.top >= window.innerHeight) { clearListPreview(); return; }
-    const previewHeight = preview.offsetHeight || preview.getBoundingClientRect().height;
-    const target = rect.top + rect.height / 2 - rect.height * .35;
-    const center = THREE.MathUtils.clamp(target, 18 + previewHeight / 2, window.innerHeight - 18 - previewHeight / 2);
-    preview.style.top = `${Math.round(center)}px`;
+    positionListPreview(active);
   }
   function queuePreviewPosition() {
     if (!listPreviewPositionFrame) listPreviewPositionFrame = requestAnimationFrame(updateActivePreviewPosition);
   }
+  function waitForImage(image, source, timeout = 1600) {
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = success => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        image.onload = null; image.onerror = null;
+        resolve({ success, naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight });
+      };
+      image.onload = () => finish(image.naturalWidth > 0);
+      image.onerror = () => finish(false);
+      if (image.src !== source) image.src = source;
+      if (image.complete) queueMicrotask(() => finish(image.naturalWidth > 0));
+      if (typeof image.decode === 'function') image.decode().then(() => finish(image.naturalWidth > 0)).catch(() => {
+        if (image.complete && image.naturalWidth > 0) finish(true);
+      });
+      const timer = window.setTimeout(() => finish(image.complete && image.naturalWidth > 0), timeout);
+    });
+  }
+  function isPreviewActuallyVisible() {
+    const layer = previewLayers[listPreviewState.activeLayer];
+    const image = layer?.querySelector('img');
+    if (!layer || !image || preview.hidden) return false;
+    const stageStyle = getComputedStyle(preview), layerStyle = getComputedStyle(layer);
+    return stageStyle.display !== 'none' && stageStyle.visibility !== 'hidden' && Number(stageStyle.opacity) > .01 && layerStyle.visibility !== 'hidden' && Number(layerStyle.opacity) > .01 && image.complete && image.naturalWidth > 0;
+  }
+  function showListPreviewFallback(entry, index) {
+    console.warn('[ListPreview] Missing or unavailable preview source:', entry, index);
+    ensurePreviewStageVisible();
+    const layer = previewLayers[listPreviewState.activeLayer];
+    resetPreviewLayer(layer); layer.style.clipPath = 'inset(0% 0% 0% 0% round 18px)';
+    layer.style.background = entry.backgroundColor || '#11110f';
+    listPreviewState.displayedIndex = index;
+  }
+  async function transitionListPreview({ serial, index, incomingLayerIndex, incomingLayer, outgoingLayer }) {
+    const state = listPreviewState;
+    ensurePreviewStageVisible();
+    incomingLayer.style.zIndex = '2'; outgoingLayer.style.zIndex = '1';
+    const reduced = motion.matches;
+    const incomingAnimation = incomingLayer.animate([
+      { clipPath: 'inset(50% 50% 50% 50% round 18px)', opacity: .15, transform: 'translateZ(0) scale(.985)' },
+      { clipPath: 'inset(0% 0% 0% 0% round 18px)', opacity: 1, transform: 'translateZ(0) scale(1)' },
+    ], { duration: reduced ? 1 : LIST_PREVIEW_MOTION.revealDuration, easing: LIST_PREVIEW_MOTION.revealEasing, fill: 'forwards' });
+    if (state.displayedIndex >= 0 && outgoingLayer !== incomingLayer) {
+      outgoingLayer.animate([{ opacity: 1, transform: 'translateZ(0) scale(1)' }, { opacity: 0, transform: 'translateZ(0) scale(1.015)' }], { duration: reduced ? 1 : LIST_PREVIEW_MOTION.outgoingDuration, easing: LIST_PREVIEW_MOTION.exitEasing, fill: 'forwards' }).finished.catch(() => {});
+    }
+    try { await incomingAnimation.finished; } catch { return; }
+    if (state.disposed || serial !== state.transitionSerial || state.desiredIndex !== index) return;
+    incomingLayer.style.clipPath = 'inset(0% 0% 0% 0% round 18px)'; incomingLayer.style.opacity = '1'; incomingLayer.style.transform = 'translateZ(0) scale(1)'; incomingLayer.style.visibility = 'visible';
+    state.activeLayer = incomingLayerIndex; state.displayedIndex = index; state.visible = true;
+    if (outgoingLayer !== incomingLayer) { outgoingLayer.style.opacity = '0'; outgoingLayer.style.visibility = 'hidden'; }
+    ensurePreviewStageVisible();
+  }
   async function activateListProject(index, project) {
-    if (!listMode || !normalizedEntries[index]) return;
-    clearTimeout(listPreviewCloseTimer);
-    if (index === activeListProjectIndex && project.classList.contains('is-active')) { queuePreviewPosition(); return; }
-    const transitionId = ++listPreviewTransitionId;
+    const state = listPreviewState;
+    if (!listMode || state.disposed || !normalizedEntries[index]) return;
+    clearTimeout(state.leaveTimer);
+    if (index === state.desiredIndex) {
+      queuePreviewPosition();
+      if (index === state.displayedIndex && !isPreviewActuallyVisible()) repairCurrentListPreview(index, project);
+      return;
+    }
+    state.desiredIndex = index; state.visible = true;
+    const serial = ++state.transitionSerial;
     const entry = normalizedEntries[index];
     listIndex.querySelectorAll('.gallery-list-project.is-active').forEach(item => {
       item.classList.remove('is-active'); item.removeAttribute('aria-current');
     });
-    activeListProjectIndex = index; project.classList.add('is-active'); project.setAttribute('aria-current', 'true');
-    list.classList.add('has-active-project'); preview.style.visibility = 'visible'; preview.style.opacity = '1';
-    queuePreviewPosition();
-    const incomingIndex = previewLayers[visiblePreviewLayer].querySelector('img').getAttribute('src')
-      ? 1 - visiblePreviewLayer
-      : visiblePreviewLayer;
+    project.classList.add('is-active'); project.setAttribute('aria-current', 'true');
+    list.classList.add('has-active-project'); shell.classList.add('has-active-list-project'); ensurePreviewStageVisible(); positionListPreview(project);
+    const incomingIndex = state.activeLayer === 0 ? 1 : 0;
     const incoming = previewLayers[incomingIndex];
-    const outgoing = previewLayers[visiblePreviewLayer];
+    const outgoing = previewLayers[state.activeLayer];
     const incomingImage = setPreviewImage(incoming, entry);
-    incoming.style.opacity = '0';
-    incoming.style.clipPath = 'inset(50% 50% 50% 50% round 18px)';
-    incomingImage.src = entry.previewSource;
-    try { await incomingImage.decode?.(); } catch { /* Cached/load-event images remain usable. */ }
-    if (disposed || !listMode || transitionId !== listPreviewTransitionId) return;
-    previewLayers.forEach(finishAndCancelAnimations);
-    previewLayers.forEach(layer => layer.classList.remove('is-animating'));
-    incoming.style.zIndex = '2'; outgoing.style.zIndex = '1';
-    incoming.classList.add('is-animating');
-    if (previewIsVisible && outgoing !== incoming) outgoing.classList.add('is-animating');
-    incoming.style.opacity = '.72'; incoming.style.clipPath = 'inset(50% 50% 50% 50% round 18px)';
-    incoming.style.transform = 'scale(.985)'; incoming.style.filter = 'brightness(.86)';
-    const reduced = motion.matches;
-    const reveal = incoming.animate([
-      { clipPath: 'inset(50% 50% 50% 50% round 18px)', opacity: .72, transform: 'scale(.985)', filter: 'brightness(.86)' },
-      { offset: .35, opacity: 1 },
-      { clipPath: 'inset(0% 0% 0% 0% round 18px)', opacity: 1, transform: 'scale(1)', filter: 'brightness(1)' },
-    ], { duration: reduced ? 1 : LIST_PREVIEW_MOTION.revealDuration, easing: LIST_PREVIEW_MOTION.revealEasing, fill: 'forwards' });
-    if (previewIsVisible && outgoing !== incoming && outgoing.querySelector('img').getAttribute('src')) {
-      outgoing.animate([
-        { opacity: 1, transform: 'scale(1)', filter: 'brightness(1)' },
-        { opacity: 0, transform: 'scale(1.025)', filter: 'brightness(.72)' },
-      ], { duration: reduced ? 1 : LIST_PREVIEW_MOTION.outgoingDuration, easing: LIST_PREVIEW_MOTION.exitEasing, fill: 'forwards' })
-        .finished.catch(() => {}).then(() => {
-          outgoing.classList.remove('is-animating');
-          if (transitionId === listPreviewTransitionId) outgoing.querySelector('img').removeAttribute('src');
-        });
-    }
-    visiblePreviewLayer = incomingIndex;
-    previewIsVisible = true;
-    reveal.finished.catch(() => {}).then(() => incoming.classList.remove('is-animating'));
+    const source = resolveProjectPreviewSource(entry, index);
+    if (!source) { showListPreviewFallback(entry, index); return; }
+    resetPreviewLayer(incoming); incoming.dataset.serial = String(serial);
+    const result = await waitForImage(incomingImage, source);
+    if (state.disposed || !listMode || serial !== state.transitionSerial || state.desiredIndex !== index || incoming.dataset.serial !== String(serial)) return;
+    if (!result.success) { showListPreviewFallback(entry, index); return; }
+    await transitionListPreview({ serial, index, incomingLayerIndex: incomingIndex, incomingLayer: incoming, outgoingLayer: outgoing });
   }
   function clearListPreview({ immediate = false } = {}) {
-    clearTimeout(listPreviewCloseTimer); listPreviewCloseTimer = 0; ++listPreviewTransitionId;
-    activeListProjectIndex = -1; previewIsVisible = false; list.classList.remove('has-active-project');
+    const state = listPreviewState;
+    clearTimeout(state.leaveTimer); state.leaveTimer = 0; ++state.transitionSerial;
+    state.desiredIndex = -1; state.displayedIndex = -1; state.visible = false; list.classList.remove('has-active-project'); shell.classList.remove('has-active-list-project');
     listIndex.querySelectorAll('.gallery-list-project.is-active').forEach(item => { item.classList.remove('is-active'); item.removeAttribute('aria-current'); });
-    const layer = previewLayers[visiblePreviewLayer];
     previewLayers.forEach(finishAndCancelAnimations);
     const cleanup = () => {
-      previewLayers.forEach(item => { item.classList.remove('is-animating'); item.style.opacity = '0'; item.querySelector('img').removeAttribute('src'); });
-      preview.style.visibility = 'hidden'; preview.style.opacity = '0';
+      previewLayers.forEach(item => { item.style.opacity = '0'; item.style.visibility = 'hidden'; });
+      preview.classList.remove('is-visible'); preview.style.visibility = 'hidden'; preview.style.opacity = '0'; preview.hidden = true; preview.setAttribute('aria-hidden', 'true');
     };
+    const layer = previewLayers[state.activeLayer];
     if (immediate || !layer.querySelector('img').getAttribute('src')) { cleanup(); return; }
     layer.animate([
       { clipPath: 'inset(0% 0% 0% 0% round 18px)', opacity: 1, transform: 'scale(1)' },
       { clipPath: 'inset(50% 50% 50% 50% round 18px)', opacity: 0, transform: 'scale(.985)' },
     ], { duration: motion.matches ? 1 : LIST_PREVIEW_MOTION.closeDuration, easing: LIST_PREVIEW_MOTION.exitEasing, fill: 'forwards' })
-      .finished.catch(() => {}).then(cleanup);
+      .finished.then(cleanup).catch(() => {});
   }
   function scheduleListPreviewClose() {
-    clearTimeout(listPreviewCloseTimer);
-    listPreviewCloseTimer = window.setTimeout(() => clearListPreview(), LIST_PREVIEW_MOTION.leaveDelay);
+    const state = listPreviewState;
+    clearTimeout(state.leaveTimer);
+    state.leaveTimer = window.setTimeout(() => {
+      const hovered = document.querySelector('.gallery-list-project:hover');
+      if (hovered && listIndex.contains(hovered)) activateListProject(Number(hovered.dataset.projectIndex), hovered);
+      else clearListPreview();
+    }, LIST_PREVIEW_MOTION.leaveDelay);
   }
   function handleProjectPointerOver(event) {
     const project = event.target.closest('.gallery-list-project');
-    if (!project || !listIndex.contains(project) || project.contains(event.relatedTarget)) return;
+    const previous = event.relatedTarget?.closest?.('.gallery-list-project');
+    if (!project || !listIndex.contains(project) || previous === project) return;
     activateListProject(Number(project.dataset.projectIndex), project);
   }
   function handleProjectPointerOut(event) {
     const project = event.target.closest('.gallery-list-project');
-    if (!project || !listIndex.contains(project) || event.relatedTarget?.closest?.('.gallery-list-project')) return;
+    const next = event.relatedTarget?.closest?.('.gallery-list-project');
+    if (!project || !listIndex.contains(project) || next === project || (next && listIndex.contains(next))) return;
     scheduleListPreviewClose();
+  }
+  function handleProjectPointerMove(event) {
+    const project = event.target.closest('.gallery-list-project');
+    if (!project || !listIndex.contains(project)) return;
+    const index = Number(project.dataset.projectIndex);
+    if (index !== listPreviewState.desiredIndex) activateListProject(index, project);
+    else if (index === listPreviewState.displayedIndex && !isPreviewActuallyVisible()) repairCurrentListPreview(index, project);
+  }
+  function repairCurrentListPreview(index, project) {
+    const layer = previewLayers[listPreviewState.activeLayer];
+    const image = layer?.querySelector('img');
+    ensurePreviewStageVisible(); positionListPreview(project); finishAndCancelAnimations(layer);
+    layer.style.visibility = 'visible'; layer.style.opacity = '1'; layer.style.clipPath = 'inset(0% 0% 0% 0% round 18px)'; layer.style.transform = 'translateZ(0) scale(1)';
+    if (!image?.src || image.naturalWidth === 0) {
+      listPreviewState.desiredIndex = -1;
+      activateListProject(index, project);
+    }
   }
   function handleListFocusIn(event) {
     const project = event.target.closest('.gallery-list-project');
@@ -475,7 +575,7 @@ export function mountGallery(host) {
     const project = event.target.closest('.gallery-list-project');
     if (!project || !listIndex.contains(project)) { clearListPreview(); return; }
     const index = Number(project.dataset.projectIndex);
-    if (index !== activeListProjectIndex) { event.preventDefault(); activateListProject(index, project); }
+    if (index !== listPreviewState.desiredIndex) { event.preventDefault(); activateListProject(index, project); }
   }
   function preloadListImages() {
     // Keep decoding off the interaction path without creating dozens of large
@@ -496,10 +596,11 @@ export function mountGallery(host) {
   else window.setTimeout(preloadListImages, 300);
   listIndex.addEventListener('pointerover', handleProjectPointerOver);
   listIndex.addEventListener('pointerout', handleProjectPointerOut);
+  listIndex.addEventListener('pointermove', handleProjectPointerMove, { passive: true });
   listIndex.addEventListener('focusin', handleListFocusIn);
   listIndex.addEventListener('focusout', handleListFocusOut);
   listIndex.addEventListener('click', handleListClick);
-  list.addEventListener('scroll', queuePreviewPosition, { passive: true });
+  listScroll.addEventListener('scroll', queuePreviewPosition, { passive: true });
   function switchView(event) {
     if (calibrationMode) return;
     listMode = event.currentTarget.dataset.view === 'list';
@@ -509,6 +610,8 @@ export function mountGallery(host) {
       frame = 0;
     }
     clearListPreview({ immediate: true });
+    listPreviewState.disposed = !listMode;
+    if (listMode) { listPreviewState.disposed = false; listPreviewState.transitionSerial += 1; }
     clearHover();
     list.hidden = !listMode; host.style.visibility = listMode ? 'hidden' : 'visible';
     buttons.forEach(button => button.setAttribute('aria-pressed', String((button.dataset.view === 'list') === listMode)));
@@ -1326,10 +1429,11 @@ export function mountGallery(host) {
       cancelAnimationFrame(listPreviewPositionFrame);
       listIndex.removeEventListener('pointerover', handleProjectPointerOver);
       listIndex.removeEventListener('pointerout', handleProjectPointerOut);
+      listIndex.removeEventListener('pointermove', handleProjectPointerMove);
       listIndex.removeEventListener('focusin', handleListFocusIn);
       listIndex.removeEventListener('focusout', handleListFocusOut);
       listIndex.removeEventListener('click', handleListClick);
-      list.removeEventListener('scroll', queuePreviewPosition);
+      listScroll.removeEventListener('scroll', queuePreviewPosition);
       list.replaceChildren();
       tooltip.remove(); tooltipStyle.remove(); disposeBuild();
       textureCache.forEach(texture => releaseResource(texture));
