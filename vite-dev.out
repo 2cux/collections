@@ -1,0 +1,11 @@
+
+> cao-bo-portfolio-intro@0.1.0 dev
+> vite --host 127.0.0.1
+
+
+  VITE v7.3.6  ready in 336 ms
+
+  ➜  Local:   http://127.0.0.1:5173/
+  ➜  press h + enter to show help
+14:57:00 [vite] (client) page reload src/gallery.js
+14:57:25 [vite] (client) page reload src/gallery.js

@@ -9,8 +9,8 @@ export function wrapSpiralOffset(offset, span) {
 
 export const SPIRAL_DEPTH_TUNING = Object.freeze({
   desktop: Object.freeze({
-    yawStrength: .78,
-    maxYaw: 1.24,
+    frontBias: .22,
+    yawStrength: .9,
     pitchAmplitude: .045,
     rollAmplitude: .095,
     curveStrength: .055,
@@ -21,8 +21,8 @@ export const SPIRAL_DEPTH_TUNING = Object.freeze({
     edgeBrightness: .88,
   }),
   mobile: Object.freeze({
-    yawStrength: .64,
-    maxYaw: 1.08,
+    frontBias: .28,
+    yawStrength: .82,
     pitchAmplitude: .04,
     rollAmplitude: .085,
     curveStrength: .045,
@@ -33,8 +33,8 @@ export const SPIRAL_DEPTH_TUNING = Object.freeze({
     edgeBrightness: .9,
   }),
   compactLandscape: Object.freeze({
-    yawStrength: .64,
-    maxYaw: 1.08,
+    frontBias: .28,
+    yawStrength: .82,
     pitchAmplitude: .04,
     rollAmplitude: .085,
     curveStrength: .045,
@@ -50,8 +50,16 @@ export const SPIRAL_LAYOUT = {
   desktop: { radius: 4.35, pitch: 10.8, step: 0.9, width: 3.05, aspect: 1.6, count: 25, cameraShare: 0.29, depth: SPIRAL_DEPTH_TUNING.desktop },
   mobile: { radius: 2.35, pitch: 9.2, step: 0.94, width: 2.05, aspect: 1.6, count: 23, targetShare: 0.76, cameraMin: 7.0, cameraMax: 12.5, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04, depth: SPIRAL_DEPTH_TUNING.mobile },
   compactLandscape: { radius: 2.3, pitch: 9.0, step: 0.96, width: 2.0, aspect: 1.6, count: 23, targetShare: 0.66, cameraMin: 3.25, cameraMax: 7.8, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04, depth: SPIRAL_DEPTH_TUNING.compactLandscape },
-  fov: 48, normalDamping: 14, snapDamping: 16, wheelSpeed: .0026, dragSpeed: .009, pixelRatio: 1.75,
-  autoRotation: { speed: 0.11 },
+  fov: 48, normalDamping: 14, pixelRatio: 1.75,
+  autoRotation: { speed: 0.17 },
+  wheel: {
+    impulse: .0058,
+    damping: 7.5,
+    maxVelocity: 1.25,
+    maxDeltaPixels: 120,
+    smallDeltaBoost: 1.45,
+    direction: 1,
+  },
   focus: { minDistance: .15, maxDistance: 2.4, maxBlur: .005 },
 };
 
@@ -66,7 +74,6 @@ export const QUALITY_PRESETS = Object.freeze({
   low: Object.freeze({ pixelRatio: 1.25, blurSamples: 1, motionBlur: false, anisotropy: 2 }),
 });
 
-const SNAP_EPSILON = .0005;
 const HOVER_RAYCAST_INTERVAL = 32;
 const HOVER_IN_DURATION = 180;
 const HOVER_OUT_DURATION = 150;
@@ -94,14 +101,22 @@ export function normalizeSpiralAngle(angle) {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
-export function calculateSpiralTransform({ offset, radius, pitch, spread = 1, depth = SPIRAL_DEPTH_TUNING.desktop }) {
+export function calculateStableCardYaw(angle, compact = false) {
+  const sinAngle = Math.sin(angle);
+  const cosAngle = Math.cos(angle);
+  const frontBias = compact ? .28 : .22;
+  const yawStrength = compact ? .82 : .9;
+  const stableDenominator = Math.sqrt(
+    cosAngle * cosAngle + frontBias * frontBias,
+  );
+
+  return Math.atan2(sinAngle, stableDenominator) * yawStrength;
+}
+
+export function calculateSpiralTransform({ offset, radius, pitch, spread = 1, compact = false, depth = SPIRAL_DEPTH_TUNING.desktop }) {
   const angle = offset;
   const wrappedAngle = normalizeSpiralAngle(angle);
-  const yaw = THREE.MathUtils.clamp(
-    wrappedAngle * depth.yawStrength,
-    -depth.maxYaw,
-    depth.maxYaw,
-  );
+  const yaw = calculateStableCardYaw(angle, compact);
   const pitchRotation = Math.sin(angle * .72) * depth.pitchAmplitude;
   const roll = -Math.sin(angle) * depth.rollAmplitude;
   return {
@@ -131,11 +146,12 @@ export function calculateCameraZ({ radius, cardWidth, viewportAspect, fov, targe
 }
 
 export function applyCardTransform(card, transform, { width, aspect = 1.6, curveScale = 1, tiltX = 0, tiltY = 0, tiltZ = 0 }) {
-  const cardWidth = width;
-  const cardHeight = cardWidth / aspect;
+  const cardWidth = Math.abs(width);
+  const cardHeight = Math.abs(cardWidth / aspect);
+  const cardDepth = Math.abs(cardWidth * curveScale);
   card.position.set(transform.position.x, transform.position.y, transform.position.z);
   card.rotation.set(transform.rotation.pitch + tiltX, transform.rotation.yaw + tiltY, transform.rotation.roll + tiltZ);
-  card.scale.set(cardWidth, cardHeight, cardWidth * curveScale);
+  card.scale.set(cardWidth, cardHeight, cardDepth);
 }
 
 // Kept as a small compatibility helper for callers that only need angular defocus.
@@ -267,12 +283,7 @@ export function mountGallery(host) {
     target: 0,
     velocity: 0,
     autoVelocity: 0,
-    isDragging: false,
-    isReceivingWheel: false,
-    snapRequested: false,
-    isSnapping: false,
-    snapTarget: null,
-    lastInputTime: 0,
+    renderVelocity: 0,
   };
   const state = {
     reveal: calibrationMode ? 1 : 0,
@@ -283,7 +294,7 @@ export function mountGallery(host) {
     cameraZ: 0,
   };
   let renderer, config, cards = [], resources = new Set(), resourceRefs = new Map(), frame = 0, last = 0, buildVersion = 0;
-  let enabled = false, disposed = false;
+  let enabled = false, disposed = false, wheelVelocity = 0;
   let previousCurrent = 0;
   let compactLayout = false, viewportWidth = 0, viewportHeight = 0, resizeFrame = 0;
   let dirty = true, previousReveal = -1, listMode = false, calibrationLogKey = '', lastHoverRaycast = 0;
@@ -314,6 +325,7 @@ export function mountGallery(host) {
   function switchView(event) {
     if (calibrationMode) return;
     listMode = event.currentTarget.dataset.view === 'list';
+    if (listMode) wheelVelocity = 0;
     clearHover();
     list.hidden = !listMode; host.style.visibility = listMode ? 'hidden' : 'visible';
     buttons.forEach(button => button.setAttribute('aria-pressed', String((button.dataset.view === 'list') === listMode)));
@@ -571,12 +583,36 @@ export function mountGallery(host) {
       const radius = config.radius + THREE.MathUtils.clamp(radialOffset, -.08, .08);
       const depth = config.depth || SPIRAL_DEPTH_TUNING.desktop;
       const curveScale = depth.curveStrength / SPIRAL_DEPTH_TUNING.desktop.curveStrength;
-      const transform = calculateSpiralTransform({ offset, radius, pitch: config.pitch, spread, depth });
+      const transform = calculateSpiralTransform({ offset, radius, pitch: config.pitch, spread, compact: compactLayout, depth });
+      const { angle } = transform;
       applyCardTransform(card, transform, { width: config.width * size, aspect, curveScale, tiltX, tiltY, tiltZ });
       const surface = card.children[0].material;
       card.updateMatrixWorld(true);
       worldPosition.copy(card.position).applyMatrix4(spiralRoot.matrixWorld);
       const projected = projectedPosition.copy(worldPosition).project(camera);
+      if (import.meta.env.DEV) {
+        const previousYaw = card.userData.previousYaw;
+        const previousAngle = card.userData.previousYawAngle;
+        const continuedOnSameTurn = Number.isFinite(previousAngle)
+          && Math.abs(angle - previousAngle) < config.step;
+        if (continuedOnSameTurn && Number.isFinite(previousYaw)) {
+          const deltaYaw = Math.atan2(
+            Math.sin(transform.rotation.yaw - previousYaw),
+            Math.cos(transform.rotation.yaw - previousYaw),
+          );
+          if (Math.abs(deltaYaw) > THREE.MathUtils.degToRad(12)) {
+            console.warn('[spiral-yaw-jump]', {
+              index: i,
+              angle,
+              previousYaw,
+              yaw: transform.rotation.yaw,
+              deltaYaw,
+            });
+          }
+        }
+        card.userData.previousYaw = transform.rotation.yaw;
+        card.userData.previousYawAngle = angle;
+      }
       const absoluteOffset = Math.abs(offset);
       if (absoluteOffset < closestDistance) {
         closestDistance = absoluteOffset;
@@ -621,8 +657,8 @@ export function mountGallery(host) {
       const portraitCompensation = aspect < 1
         ? THREE.MathUtils.lerp(.72, 1, THREE.MathUtils.clamp((aspect - .75) / .25, 0, 1))
         : 1;
-      const cardWidth = config.width * Math.min(1.06, size) * portraitCompensation * focusScale * hoverScale;
-      card.scale.set(cardWidth, cardWidth / aspect, cardWidth * curveScale);
+      const cardWidth = Math.abs(config.width * Math.min(1.06, size) * portraitCompensation * focusScale * hoverScale);
+      card.scale.set(cardWidth, Math.abs(cardWidth / aspect), Math.abs(cardWidth * curveScale));
       // Move toward the camera in world space. This is kept in the Three.js
       // positioning pass, so it cannot compete with a CSS transform.
       if (hoverProgress > .0001) {
@@ -676,12 +712,43 @@ export function mountGallery(host) {
     if (!Number.isFinite(span) || span <= 0 || !Number.isFinite(motionState.current)) return;
     const normalized = wrapSpiralOffset(motionState.current, span);
     const distance = motionState.current - normalized;
-    if (Math.abs(distance) < SNAP_EPSILON) return;
+    if (Math.abs(distance) < .0005) return;
     motionState.current = normalized;
     motionState.target -= distance;
     previousCurrent -= distance;
-    if (motionState.snapTarget !== null) motionState.snapTarget -= distance;
   }
+
+  function normalizeWheelPixels(event) {
+    let pixels = event.deltaY;
+    if (event.deltaMode === 1) pixels *= 16;
+    else if (event.deltaMode === 2) pixels *= Math.max(1, viewportHeight);
+    return THREE.MathUtils.clamp(
+      pixels,
+      -SPIRAL_LAYOUT.wheel.maxDeltaPixels,
+      SPIRAL_LAYOUT.wheel.maxDeltaPixels,
+    );
+  }
+
+  function applyWheelResponse(pixels) {
+    const magnitude = Math.abs(pixels);
+    const sign = Math.sign(pixels);
+    if (magnitude < 24) return sign * magnitude * SPIRAL_LAYOUT.wheel.smallDeltaBoost;
+    return sign * (24 * SPIRAL_LAYOUT.wheel.smallDeltaBoost + (magnitude - 24) * .78);
+  }
+
+  function onWheel(event) {
+    if (calibrationMode || !enabled || listMode || event.ctrlKey) return;
+    event.preventDefault();
+    wheelVelocity += applyWheelResponse(normalizeWheelPixels(event))
+      * SPIRAL_LAYOUT.wheel.impulse * SPIRAL_LAYOUT.wheel.direction;
+    wheelVelocity = THREE.MathUtils.clamp(
+      wheelVelocity,
+      -SPIRAL_LAYOUT.wheel.maxVelocity,
+      SPIRAL_LAYOUT.wheel.maxVelocity,
+    );
+    wake();
+  }
+
   function tick(time) {
     frame = 0;
     if (disposed || document.hidden || !renderer || canvas.hidden) return;
@@ -700,22 +767,24 @@ export function mountGallery(host) {
       motionState.target = 0;
       motionState.velocity = 0;
       motionState.autoVelocity = 0;
-      motionState.isReceivingWheel = false;
-      motionState.snapRequested = false;
-      motionState.isSnapping = false;
-      motionState.snapTarget = null;
+      motionState.renderVelocity = 0;
+      wheelVelocity = 0;
     }
     const span = cards.length * config.step;
     normalizeTravel(span);
     const autoMoving = enabled && !calibrationMode && !listMode;
+    wheelVelocity *= Math.exp(-SPIRAL_LAYOUT.wheel.damping * dt);
+    if (Math.abs(wheelVelocity) < .0005) wheelVelocity = 0;
     if (autoMoving) {
       // Non-interruptible, frame-rate-independent motion: hover and pointer
       // input never alter the angle or the angular velocity.
       motionState.autoVelocity = SPIRAL_LAYOUT.autoRotation.speed;
-      motionState.current += motionState.autoVelocity * dt;
+      motionState.renderVelocity = motionState.autoVelocity + wheelVelocity;
+      motionState.current += motionState.renderVelocity * dt;
       motionState.target = motionState.current;
     } else {
       motionState.autoVelocity = 0;
+      motionState.renderVelocity = 0;
     }
     normalizeTravel(span);
     const renderVelocity = (motionState.current - previousCurrent) / Math.max(dt, .001);
@@ -890,6 +959,7 @@ export function mountGallery(host) {
   }
   function visibility() {
     if (document.hidden) clearHover();
+    if (document.hidden) wheelVelocity = 0;
     motionState.velocity = 0;
     motionState.autoVelocity = 0;
     cancelAnimationFrame(frame); frame = 0; last = 0; previousCurrent = motionState.current;
@@ -900,6 +970,7 @@ export function mountGallery(host) {
     event.preventDefault();
     resumeAfterContextRestore = enabled;
     contextLost = true;
+    wheelVelocity = 0;
     clearHover(); fail();
   }
   function restored() {
@@ -922,6 +993,7 @@ export function mountGallery(host) {
   host.addEventListener('pointermove', hover);
   host.addEventListener('pointerleave', stagePointerLeave);
   host.addEventListener('click', navigateFromPointer);
+  host.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('webglcontextlost', lost); canvas.addEventListener('webglcontextrestored', restored);
   motion.addEventListener?.('change', motionChanged);
   window.addEventListener('resize', queueResize); document.addEventListener('visibilitychange', visibility);
@@ -932,20 +1004,19 @@ export function mountGallery(host) {
       enabled = value && !!renderer && !canvas.hidden;
       if (!value) {
         clearHover();
-        motionState.isReceivingWheel = false;
-        motionState.isSnapping = false;
-        motionState.snapRequested = false;
-        motionState.snapTarget = null;
+        wheelVelocity = 0;
         motionState.velocity = 0;
         motionState.autoVelocity = 0;
+        motionState.renderVelocity = 0;
       }
       host.dataset.interactive = 'false';
       if (enabled) wake();
     },
     reset() {
       enabled = false; clearHover(); motionState.current = motionState.target = 0; motionState.velocity = 0;
-      motionState.isDragging = false; motionState.isReceivingWheel = false; motionState.snapRequested = false; motionState.isSnapping = false; motionState.snapTarget = null; motionState.lastInputTime = 0;
+      wheelVelocity = 0;
       motionState.autoVelocity = 0;
+      motionState.renderVelocity = 0;
       state.reveal = calibrationMode ? 1 : 0;
       cards.forEach(card => { card.userData.isActive = false; });
       state.activeIndex = 0; state.activeCardIndex = -1; state.activeProject = null; host.setAttribute('aria-label', baseStageLabel);
@@ -956,6 +1027,7 @@ export function mountGallery(host) {
       disposed = true; cancelAnimationFrame(frame); cancelAnimationFrame(resizeFrame); resizeFrame = 0; clearHover();
       host.removeEventListener('pointerenter', pointerEnter); host.removeEventListener('pointermove', hover);
       host.removeEventListener('click', navigateFromPointer); canvas.removeEventListener('webglcontextlost', lost);
+      host.removeEventListener('wheel', onWheel);
       host.removeEventListener('pointerleave', stagePointerLeave); canvas.removeEventListener('webglcontextrestored', restored);
       motion.removeEventListener?.('change', motionChanged);
       window.removeEventListener('resize', queueResize); document.removeEventListener('visibilitychange', visibility);
