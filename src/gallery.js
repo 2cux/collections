@@ -313,19 +313,175 @@ export function mountGallery(host) {
     title: studyNames[slot.study],
     cover: artwork[slot.study].toDataURL(),
   }));
-  entries.forEach((entry, i) => {
-    const row = document.createElement('div'); row.className = 'gallery-list-row';
-    const img = document.createElement('img'); img.src = entry.cover || artwork[entry.study ?? i % artwork.length].toDataURL(); img.alt = entry.placeholder ? '' : entry.title;
-    img.style.aspectRatio = String(entry.aspect); img.style.objectFit = entry.fit; img.style.objectPosition = `${entry.focalX * 100}% ${entry.focalY * 100}%`; img.style.backgroundColor = entry.backgroundColor;
-    const name = entry.link && !entry.placeholder ? document.createElement('a') : document.createElement('span'); name.textContent = entry.title;
-    if (name.tagName === 'A') { name.href = entry.link; name.target = '_blank'; name.rel = 'noreferrer'; }
-    const meta = document.createElement('small'); meta.textContent = entry.placeholder ? '视觉预览 / '+String(i+1).padStart(2,'0') : String(i+1).padStart(2,'0');
-    row.append(img, name, meta); list.append(row);
+  // This is the sole image source contract for every gallery presentation.
+  // Generated artwork is encoded once here, rather than on every list hover.
+  const normalizedEntries = entries.map((entry, index) => ({
+    ...entry,
+    previewSource: entry.cover || artwork[entry.study ?? index % artwork.length].toDataURL(),
+  }));
+  const LIST_PREVIEW_MOTION = {
+    revealDuration: 560, outgoingDuration: 340, closeDuration: 280, leaveDelay: 70,
+    revealEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    exitEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  };
+  const listDimmer = document.createElement('div');
+  listDimmer.className = 'gallery-list-dimmer'; listDimmer.setAttribute('aria-hidden', 'true');
+  const preview = document.createElement('div');
+  preview.className = 'gallery-list-preview'; preview.setAttribute('aria-hidden', 'true');
+  const previewLayers = [0, 1].map(index => {
+    const layer = document.createElement('div');
+    layer.className = `gallery-list-preview-layer gallery-list-preview-layer-${index ? 'b' : 'a'}`;
+    const image = document.createElement('img'); image.alt = ''; image.decoding = 'async';
+    layer.append(image); preview.append(layer); return layer;
   });
+  const listIndex = document.createElement('div'); listIndex.className = 'gallery-list-index';
+  normalizedEntries.forEach((entry, index) => {
+    const project = entry.link && !entry.placeholder ? document.createElement('a') : document.createElement('button');
+    project.className = 'gallery-list-project'; project.dataset.projectIndex = String(index);
+    if (project.tagName === 'A') { project.href = entry.link; project.target = '_blank'; project.rel = 'noreferrer'; }
+    else project.type = 'button';
+    const title = document.createElement('span'); title.className = 'gallery-list-project-title'; title.textContent = entry.title;
+    project.append(title); listIndex.append(project);
+  });
+  list.append(listDimmer, preview, listIndex);
+  let visiblePreviewLayer = 0, activeListProjectIndex = -1, listPreviewTransitionId = 0, previewIsVisible = false;
+  let listPreviewCloseTimer = 0, listPreviewPositionFrame = 0;
+
+  function finishAndCancelAnimations(element) {
+    element.getAnimations().forEach(animation => {
+      try { animation.commitStyles?.(); } catch { /* Some browsers cannot commit cancelled animations. */ }
+      animation.cancel();
+    });
+  }
+  function setPreviewImage(layer, entry) {
+    const image = layer.querySelector('img');
+    image.style.objectFit = entry.fit || 'cover';
+    image.style.objectPosition = `${entry.focalX * 100}% ${entry.focalY * 100}%`;
+    layer.style.backgroundColor = entry.backgroundColor || '#11110f';
+    preview.style.setProperty('--preview-aspect', String(entry.aspect || 1.6));
+    return image;
+  }
+  function updateActivePreviewPosition() {
+    listPreviewPositionFrame = 0;
+    const active = listIndex.querySelector('.gallery-list-project.is-active');
+    if (!active || !listMode) return;
+    const rect = active.getBoundingClientRect();
+    if (rect.bottom <= 0 || rect.top >= window.innerHeight) { clearListPreview(); return; }
+    const previewHeight = preview.offsetHeight || preview.getBoundingClientRect().height;
+    const target = rect.top + rect.height / 2 - rect.height * .35;
+    const center = THREE.MathUtils.clamp(target, 18 + previewHeight / 2, window.innerHeight - 18 - previewHeight / 2);
+    preview.style.top = `${Math.round(center)}px`;
+  }
+  function queuePreviewPosition() {
+    if (!listPreviewPositionFrame) listPreviewPositionFrame = requestAnimationFrame(updateActivePreviewPosition);
+  }
+  async function activateListProject(index, project) {
+    if (!listMode || !normalizedEntries[index]) return;
+    clearTimeout(listPreviewCloseTimer);
+    if (index === activeListProjectIndex && project.classList.contains('is-active')) { queuePreviewPosition(); return; }
+    const transitionId = ++listPreviewTransitionId;
+    const entry = normalizedEntries[index];
+    listIndex.querySelectorAll('.gallery-list-project.is-active').forEach(item => {
+      item.classList.remove('is-active'); item.removeAttribute('aria-current');
+    });
+    activeListProjectIndex = index; project.classList.add('is-active'); project.setAttribute('aria-current', 'true');
+    list.classList.add('has-active-project'); preview.style.visibility = 'visible'; preview.style.opacity = '1';
+    queuePreviewPosition();
+    const incomingIndex = previewLayers[visiblePreviewLayer].querySelector('img').getAttribute('src')
+      ? 1 - visiblePreviewLayer
+      : visiblePreviewLayer;
+    const incoming = previewLayers[incomingIndex];
+    const outgoing = previewLayers[visiblePreviewLayer];
+    const incomingImage = setPreviewImage(incoming, entry);
+    incoming.style.opacity = '0';
+    incoming.style.clipPath = 'inset(50% 50% 50% 50% round 18px)';
+    incomingImage.src = entry.previewSource;
+    try { await incomingImage.decode?.(); } catch { /* Cached/load-event images remain usable. */ }
+    if (disposed || !listMode || transitionId !== listPreviewTransitionId) return;
+    previewLayers.forEach(finishAndCancelAnimations);
+    incoming.style.zIndex = '2'; outgoing.style.zIndex = '1';
+    incoming.style.opacity = '.72'; incoming.style.clipPath = 'inset(50% 50% 50% 50% round 18px)';
+    incoming.style.transform = 'scale(.985)'; incoming.style.filter = 'brightness(.86)';
+    const reduced = motion.matches;
+    const reveal = incoming.animate([
+      { clipPath: 'inset(50% 50% 50% 50% round 18px)', opacity: .72, transform: 'scale(.985)', filter: 'brightness(.86)' },
+      { offset: .35, opacity: 1 },
+      { clipPath: 'inset(0% 0% 0% 0% round 18px)', opacity: 1, transform: 'scale(1)', filter: 'brightness(1)' },
+    ], { duration: reduced ? 1 : LIST_PREVIEW_MOTION.revealDuration, easing: LIST_PREVIEW_MOTION.revealEasing, fill: 'forwards' });
+    if (previewIsVisible && outgoing !== incoming && outgoing.querySelector('img').getAttribute('src')) {
+      outgoing.animate([
+        { opacity: 1, transform: 'scale(1)', filter: 'brightness(1)' },
+        { opacity: 0, transform: 'scale(1.025)', filter: 'brightness(.72)' },
+      ], { duration: reduced ? 1 : LIST_PREVIEW_MOTION.outgoingDuration, easing: LIST_PREVIEW_MOTION.exitEasing, fill: 'forwards' })
+        .finished.catch(() => {}).then(() => {
+          if (transitionId === listPreviewTransitionId) outgoing.querySelector('img').removeAttribute('src');
+        });
+    }
+    visiblePreviewLayer = incomingIndex;
+    previewIsVisible = true;
+    reveal.finished.catch(() => {});
+  }
+  function clearListPreview({ immediate = false } = {}) {
+    clearTimeout(listPreviewCloseTimer); listPreviewCloseTimer = 0; ++listPreviewTransitionId;
+    activeListProjectIndex = -1; previewIsVisible = false; list.classList.remove('has-active-project');
+    listIndex.querySelectorAll('.gallery-list-project.is-active').forEach(item => { item.classList.remove('is-active'); item.removeAttribute('aria-current'); });
+    const layer = previewLayers[visiblePreviewLayer];
+    previewLayers.forEach(finishAndCancelAnimations);
+    const cleanup = () => {
+      previewLayers.forEach(item => { item.style.opacity = '0'; item.querySelector('img').removeAttribute('src'); });
+      preview.style.visibility = 'hidden'; preview.style.opacity = '0';
+    };
+    if (immediate || !layer.querySelector('img').getAttribute('src')) { cleanup(); return; }
+    layer.animate([
+      { clipPath: 'inset(0% 0% 0% 0% round 18px)', opacity: 1, transform: 'scale(1)' },
+      { clipPath: 'inset(50% 50% 50% 50% round 18px)', opacity: 0, transform: 'scale(.985)' },
+    ], { duration: motion.matches ? 1 : LIST_PREVIEW_MOTION.closeDuration, easing: LIST_PREVIEW_MOTION.exitEasing, fill: 'forwards' })
+      .finished.catch(() => {}).then(cleanup);
+  }
+  function scheduleListPreviewClose() {
+    clearTimeout(listPreviewCloseTimer);
+    listPreviewCloseTimer = window.setTimeout(() => clearListPreview(), LIST_PREVIEW_MOTION.leaveDelay);
+  }
+  function handleProjectPointerOver(event) {
+    const project = event.target.closest('.gallery-list-project');
+    if (!project || !listIndex.contains(project) || project.contains(event.relatedTarget)) return;
+    activateListProject(Number(project.dataset.projectIndex), project);
+  }
+  function handleProjectPointerOut(event) {
+    const project = event.target.closest('.gallery-list-project');
+    if (!project || !listIndex.contains(project) || event.relatedTarget?.closest?.('.gallery-list-project')) return;
+    scheduleListPreviewClose();
+  }
+  function handleListFocusIn(event) {
+    const project = event.target.closest('.gallery-list-project');
+    if (project && listIndex.contains(project)) activateListProject(Number(project.dataset.projectIndex), project);
+  }
+  function handleListFocusOut(event) {
+    if (!listIndex.contains(event.relatedTarget)) scheduleListPreviewClose();
+  }
+  function handleListClick(event) {
+    if (precisePointer.matches) return;
+    const project = event.target.closest('.gallery-list-project');
+    if (!project || !listIndex.contains(project)) { clearListPreview(); return; }
+    const index = Number(project.dataset.projectIndex);
+    if (index !== activeListProjectIndex) { event.preventDefault(); activateListProject(index, project); }
+  }
+  function preloadListImages() {
+    normalizedEntries.forEach(entry => { const image = new Image(); image.decoding = 'async'; image.src = entry.previewSource; image.decode?.().catch(() => {}); });
+  }
+  if ('requestIdleCallback' in window) window.requestIdleCallback(preloadListImages, { timeout: 1500 });
+  else window.setTimeout(preloadListImages, 300);
+  listIndex.addEventListener('pointerover', handleProjectPointerOver);
+  listIndex.addEventListener('pointerout', handleProjectPointerOut);
+  listIndex.addEventListener('focusin', handleListFocusIn);
+  listIndex.addEventListener('focusout', handleListFocusOut);
+  listIndex.addEventListener('click', handleListClick);
+  list.addEventListener('scroll', queuePreviewPosition, { passive: true });
   function switchView(event) {
     if (calibrationMode) return;
     listMode = event.currentTarget.dataset.view === 'list';
     if (listMode) wheelVelocity = 0;
+    clearListPreview({ immediate: true });
     clearHover();
     list.hidden = !listMode; host.style.visibility = listMode ? 'hidden' : 'visible';
     buttons.forEach(button => button.setAttribute('aria-pressed', String((button.dataset.view === 'list') === listMode)));
@@ -477,7 +633,9 @@ export function mountGallery(host) {
     const coverRequests = new Map();
     const sequenceLength = projects.length || studyNames.length;
     const poolSize = Math.ceil(config.count / sequenceLength) * sequenceLength;
-    cards = gallerySlots(poolSize).map((slot, i) => {
+    cards = gallerySlots(poolSize).map((rawSlot, i) => {
+      const sourceEntry = normalizedEntries[i % sequenceLength];
+      const slot = { ...rawSlot, previewSource: sourceEntry.previewSource };
       const group = new THREE.Group();
       const surface = retainResource(material.clone());
       if (!calibrationMode) applyFocus(surface, slot, quality, config.depth);
@@ -491,13 +649,13 @@ export function mountGallery(host) {
       surface.map = retainResource(createFallbackTexture());
       updateTextureUniforms(surface, surface.map);
       surface.needsUpdate = true;
-      if (slot.cover) {
-        let request = coverRequests.get(slot.cover);
-        if (!request) { request = { surfaces: new Set(), started: false }; coverRequests.set(slot.cover, request); }
+      if (slot.previewSource) {
+        let request = coverRequests.get(slot.previewSource);
+        if (!request) { request = { surfaces: new Set(), started: false }; coverRequests.set(slot.previewSource, request); }
         request.surfaces.add(surface);
         if (!request.started) {
           request.started = true;
-          loader.load(slot.cover, loadedTexture => {
+          loader.load(slot.previewSource, loadedTexture => {
             if (version !== buildVersion || disposed || !request.surfaces.size) { loadedTexture.dispose(); return; }
             configureTexture(loadedTexture);
             request.surfaces.forEach(targetSurface => replaceSurfaceMap(targetSurface, loadedTexture));
@@ -1031,7 +1189,16 @@ export function mountGallery(host) {
       host.removeEventListener('pointerleave', stagePointerLeave); canvas.removeEventListener('webglcontextrestored', restored);
       motion.removeEventListener?.('change', motionChanged);
       window.removeEventListener('resize', queueResize); document.removeEventListener('visibilitychange', visibility);
-      buttons.forEach(button => button.removeEventListener('click', switchView)); list.replaceChildren();
+      buttons.forEach(button => button.removeEventListener('click', switchView));
+      clearListPreview({ immediate: true });
+      cancelAnimationFrame(listPreviewPositionFrame);
+      listIndex.removeEventListener('pointerover', handleProjectPointerOver);
+      listIndex.removeEventListener('pointerout', handleProjectPointerOut);
+      listIndex.removeEventListener('focusin', handleListFocusIn);
+      listIndex.removeEventListener('focusout', handleListFocusOut);
+      listIndex.removeEventListener('click', handleListClick);
+      list.removeEventListener('scroll', queuePreviewPosition);
+      list.replaceChildren();
       tooltip.remove(); tooltipStyle.remove(); disposeBuild(); geometry.dispose(); material.dispose(); renderer?.dispose();
     },
   };
