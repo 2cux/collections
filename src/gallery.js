@@ -53,12 +53,13 @@ export const SPIRAL_LAYOUT = {
   fov: 48, normalDamping: 14, pixelRatio: 1.75,
   autoRotation: { speed: 0.17 },
   wheel: {
-    impulse: .0058,
-    damping: 7.5,
-    maxVelocity: 1.25,
+    impulse: .0145,
+    damping: 9,
+    maxVelocity: 2.4,
     maxDeltaPixels: 120,
-    smallDeltaBoost: 1.45,
+    smallDeltaBoost: 1.65,
     direction: 1,
+    directionCommitThreshold: 2,
   },
   focus: { minDistance: .15, maxDistance: 2.4, maxBlur: .005 },
 };
@@ -294,7 +295,7 @@ export function mountGallery(host) {
     cameraZ: 0,
   };
   let renderer, config, cards = [], resources = new Set(), resourceRefs = new Map(), frame = 0, last = 0, buildVersion = 0;
-  let enabled = false, disposed = false, wheelVelocity = 0;
+  let enabled = false, disposed = false, wheelVelocity = 0, autoDirection = 1;
   let previousCurrent = 0;
   let compactLayout = false, viewportWidth = 0, viewportHeight = 0, resizeFrame = 0;
   let dirty = true, previousReveal = -1, listMode = false, calibrationLogKey = '', lastHoverRaycast = 0;
@@ -894,11 +895,23 @@ export function mountGallery(host) {
     return sign * (24 * SPIRAL_LAYOUT.wheel.smallDeltaBoost + (magnitude - 24) * .78);
   }
 
+  function commitAutoDirection(nextDirection) {
+    if (nextDirection !== 1 && nextDirection !== -1 || nextDirection === autoDirection) return;
+    autoDirection = nextDirection;
+    if (wheelVelocity && Math.sign(wheelVelocity) !== autoDirection) wheelVelocity = 0;
+  }
+
   function onWheel(event) {
     if (calibrationMode || !enabled || listMode || event.ctrlKey) return;
     event.preventDefault();
-    wheelVelocity += applyWheelResponse(normalizeWheelPixels(event))
-      * SPIRAL_LAYOUT.wheel.impulse * SPIRAL_LAYOUT.wheel.direction;
+    const pixels = normalizeWheelPixels(event);
+    if (pixels === 0) return;
+    const responsivePixels = applyWheelResponse(pixels);
+    const inputDirection = Math.sign(responsivePixels * SPIRAL_LAYOUT.wheel.direction);
+    if (Math.abs(pixels) >= SPIRAL_LAYOUT.wheel.directionCommitThreshold) {
+      commitAutoDirection(inputDirection);
+    }
+    wheelVelocity += Math.abs(responsivePixels) * SPIRAL_LAYOUT.wheel.impulse * inputDirection;
     wheelVelocity = THREE.MathUtils.clamp(
       wheelVelocity,
       -SPIRAL_LAYOUT.wheel.maxVelocity,
@@ -936,7 +949,7 @@ export function mountGallery(host) {
     if (autoMoving) {
       // Non-interruptible, frame-rate-independent motion: hover and pointer
       // input never alter the angle or the angular velocity.
-      motionState.autoVelocity = SPIRAL_LAYOUT.autoRotation.speed;
+      motionState.autoVelocity = SPIRAL_LAYOUT.autoRotation.speed * autoDirection;
       motionState.renderVelocity = motionState.autoVelocity + wheelVelocity;
       motionState.current += motionState.renderVelocity * dt;
       motionState.target = motionState.current;
@@ -1172,7 +1185,7 @@ export function mountGallery(host) {
     },
     reset() {
       enabled = false; clearHover(); motionState.current = motionState.target = 0; motionState.velocity = 0;
-      wheelVelocity = 0;
+      wheelVelocity = 0; autoDirection = 1;
       motionState.autoVelocity = 0;
       motionState.renderVelocity = 0;
       state.reveal = calibrationMode ? 1 : 0;
