@@ -50,7 +50,7 @@ export const SPIRAL_LAYOUT = {
   desktop: { radius: 4.35, pitch: 10.8, step: 0.9, width: 3.05, aspect: 1.6, count: 25, cameraShare: 0.29, depth: SPIRAL_DEPTH_TUNING.desktop },
   mobile: { radius: 2.35, pitch: 9.2, step: 0.94, width: 2.05, aspect: 1.6, count: 23, targetShare: 0.76, cameraMin: 7.0, cameraMax: 12.5, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04, depth: SPIRAL_DEPTH_TUNING.mobile },
   compactLandscape: { radius: 2.3, pitch: 9.0, step: 0.96, width: 2.0, aspect: 1.6, count: 23, targetShare: 0.66, cameraMin: 3.25, cameraMax: 7.8, rootRotationZ: -0.035, rootOffsetX: -0.05, rootOffsetY: 0.04, depth: SPIRAL_DEPTH_TUNING.compactLandscape },
-  fov: 48, normalDamping: 14, pixelRatio: 1.75,
+  fov: 48, normalDamping: 14, pixelRatio: 1.5,
   autoRotation: { speed: 0.17 },
   wheel: {
     impulse: .0145,
@@ -70,9 +70,9 @@ export const SPIRAL_LAYOUT = {
 const CALIBRATION_MOBILE_LAYOUT = { radius: 2.12, pitch: 7.8, step: 0.78, width: 2.32, aspect: 1.6, count: 23, cameraMin: 4.4, cameraMax: 14.2, targetShare: 0.78, landscapeShare: 0.72, rootRotationZ: -0.05, rootOffsetX: -0.12, rootOffsetY: 0.05 };
 
 export const QUALITY_PRESETS = Object.freeze({
-  high: Object.freeze({ pixelRatio: 1.75, blurSamples: 9, motionBlur: true, anisotropy: 8 }),
-  medium: Object.freeze({ pixelRatio: 1.5, blurSamples: 9, motionBlur: false, anisotropy: 4 }),
-  low: Object.freeze({ pixelRatio: 1.25, blurSamples: 1, motionBlur: false, anisotropy: 2 }),
+  high: Object.freeze({ pixelRatio: 1.5, blurSamples: 5, motionBlur: true, anisotropy: 8 }),
+  medium: Object.freeze({ pixelRatio: 1.25, blurSamples: 3, motionBlur: false, anisotropy: 4 }),
+  low: Object.freeze({ pixelRatio: 1, blurSamples: 1, motionBlur: false, anisotropy: 2 }),
 });
 
 const HOVER_RAYCAST_INTERVAL = 32;
@@ -188,22 +188,24 @@ function applyFocus(surface, cardData, quality, depth) {
   surface.userData.shaderUniforms = uniforms;
   surface.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, uniforms);
-    const sampleBlock = quality.blurSamples > 1 ? `
+    const sampleBlock = quality.blurSamples === 5 ? `
         if (spiralBlurEnabled > 0.5 && (spiralBlur > 0.00001 || spiralMotionAmount > 0.00001)) {
-          vec4 blurred = vec4(0.0);
-          float total = 0.0;
-          // Fixed 3x3 kernel: static focus blur and speed blur share nine taps.
-          for (int y = -1; y <= 1; y++) {
-            for (int x = -1; x <= 1; x++) {
-              vec2 gridTap = vec2(float(x), float(y));
-              vec2 uv = cardUv + gridTap * spiralBlur * vec2(1.0, spiralCardAspect);
-              uv += spiralMotionDirection * spiralMotionAmount * 0.012 * float(x);
-              float weight = (x == 0 && y == 0) ? 4.0 : (x == 0 || y == 0 ? 2.0 : 1.0);
-              blurred += sampleSpiralCard(uv) * weight;
-              total += weight;
-            }
-          }
-          sampledDiffuseColor = blurred / total;
+          vec2 blurStep = spiralBlur * vec2(1.0, spiralCardAspect);
+          vec2 motionStep = spiralMotionDirection * spiralMotionAmount * 0.012;
+          sampledDiffuseColor = sampleSpiralCard(cardUv) * 0.4;
+          sampledDiffuseColor += sampleSpiralCard(cardUv + vec2(blurStep.x, 0.0) + motionStep) * 0.15;
+          sampledDiffuseColor += sampleSpiralCard(cardUv - vec2(blurStep.x, 0.0) - motionStep) * 0.15;
+          sampledDiffuseColor += sampleSpiralCard(cardUv + vec2(0.0, blurStep.y)) * 0.15;
+          sampledDiffuseColor += sampleSpiralCard(cardUv - vec2(0.0, blurStep.y)) * 0.15;
+        } else {
+          sampledDiffuseColor = sampleSpiralCard(cardUv);
+        }` : quality.blurSamples === 3 ? `
+        if (spiralBlurEnabled > 0.5 && (spiralBlur > 0.00001 || spiralMotionAmount > 0.00001)) {
+          vec2 blurStep = spiralBlur * vec2(1.0, spiralCardAspect);
+          vec2 motionStep = spiralMotionDirection * spiralMotionAmount * 0.012;
+          sampledDiffuseColor = sampleSpiralCard(cardUv) * 0.6;
+          sampledDiffuseColor += sampleSpiralCard(cardUv + blurStep + motionStep) * 0.2;
+          sampledDiffuseColor += sampleSpiralCard(cardUv - blurStep - motionStep) * 0.2;
         } else {
           sampledDiffuseColor = sampleSpiralCard(cardUv);
         }` : `
@@ -301,9 +303,13 @@ export function mountGallery(host) {
   let dirty = true, previousReveal = -1, listMode = false, calibrationLogKey = '', lastHoverRaycast = 0;
   let hoveredCard = null, contextLost = false;
   let pointerInside = false;
+  let stageRect = host.getBoundingClientRect(), qualityChangedAt = 0, slowSince = 0, fastSince = 0;
+  let averageFrameTime = 16.7, performanceLogAt = 0;
+  const textureCache = new Map(), textureRequests = new Map();
   const quality = { level: 'high', ...QUALITY_PRESETS.high, blurEnabled: { value: calibrationMode ? 0 : 1 } };
   const artwork = studyNames.map((_, i) => createArtwork(i));
-  [...fallback.children].forEach((card, i) => { card.style.backgroundImage = `url(${artwork[i % artwork.length].toDataURL()})`; });
+  const artworkSources = artwork.map(image => image.toDataURL());
+  [...fallback.children].forEach((card, i) => { card.style.backgroundImage = `url(${artworkSources[i % artworkSources.length]})`; });
   const shell = host.parentElement, list = shell.querySelector('.gallery-list'), grid = shell.querySelector('.gallery-grid');
   shell.classList.toggle('is-calibration', calibrationMode);
   host.dataset.spiralAutoOnly = 'true';
@@ -312,13 +318,13 @@ export function mountGallery(host) {
   const entries = projects.length ? gallerySlots(projects.length) : gallerySlots(studyNames.length).map(slot => ({
     ...slot,
     title: studyNames[slot.study],
-    cover: artwork[slot.study].toDataURL(),
+    cover: artworkSources[slot.study],
   }));
   // This is the sole image source contract for every gallery presentation.
   // Generated artwork is encoded once here, rather than on every list hover.
   const normalizedEntries = entries.map((entry, index) => ({
     ...entry,
-    previewSource: entry.cover || artwork[entry.study ?? index % artwork.length].toDataURL(),
+    previewSource: entry.cover || artworkSources[entry.study ?? index % artwork.length],
   }));
   const LIST_PREVIEW_MOTION = {
     revealDuration: 560, outgoingDuration: 340, closeDuration: 280, leaveDelay: 70,
@@ -400,7 +406,10 @@ export function mountGallery(host) {
     try { await incomingImage.decode?.(); } catch { /* Cached/load-event images remain usable. */ }
     if (disposed || !listMode || transitionId !== listPreviewTransitionId) return;
     previewLayers.forEach(finishAndCancelAnimations);
+    previewLayers.forEach(layer => layer.classList.remove('is-animating'));
     incoming.style.zIndex = '2'; outgoing.style.zIndex = '1';
+    incoming.classList.add('is-animating');
+    if (previewIsVisible && outgoing !== incoming) outgoing.classList.add('is-animating');
     incoming.style.opacity = '.72'; incoming.style.clipPath = 'inset(50% 50% 50% 50% round 18px)';
     incoming.style.transform = 'scale(.985)'; incoming.style.filter = 'brightness(.86)';
     const reduced = motion.matches;
@@ -415,12 +424,13 @@ export function mountGallery(host) {
         { opacity: 0, transform: 'scale(1.025)', filter: 'brightness(.72)' },
       ], { duration: reduced ? 1 : LIST_PREVIEW_MOTION.outgoingDuration, easing: LIST_PREVIEW_MOTION.exitEasing, fill: 'forwards' })
         .finished.catch(() => {}).then(() => {
+          outgoing.classList.remove('is-animating');
           if (transitionId === listPreviewTransitionId) outgoing.querySelector('img').removeAttribute('src');
         });
     }
     visiblePreviewLayer = incomingIndex;
     previewIsVisible = true;
-    reveal.finished.catch(() => {});
+    reveal.finished.catch(() => {}).then(() => incoming.classList.remove('is-animating'));
   }
   function clearListPreview({ immediate = false } = {}) {
     clearTimeout(listPreviewCloseTimer); listPreviewCloseTimer = 0; ++listPreviewTransitionId;
@@ -429,7 +439,7 @@ export function mountGallery(host) {
     const layer = previewLayers[visiblePreviewLayer];
     previewLayers.forEach(finishAndCancelAnimations);
     const cleanup = () => {
-      previewLayers.forEach(item => { item.style.opacity = '0'; item.querySelector('img').removeAttribute('src'); });
+      previewLayers.forEach(item => { item.classList.remove('is-animating'); item.style.opacity = '0'; item.querySelector('img').removeAttribute('src'); });
       preview.style.visibility = 'hidden'; preview.style.opacity = '0';
     };
     if (immediate || !layer.querySelector('img').getAttribute('src')) { cleanup(); return; }
@@ -468,7 +478,19 @@ export function mountGallery(host) {
     if (index !== activeListProjectIndex) { event.preventDefault(); activateListProject(index, project); }
   }
   function preloadListImages() {
-    normalizedEntries.forEach(entry => { const image = new Image(); image.decoding = 'async'; image.src = entry.previewSource; image.decode?.().catch(() => {}); });
+    // Keep decoding off the interaction path without creating dozens of large
+    // decoded bitmaps at once. The next item is queued as each task finishes.
+    let next = 0;
+    const workers = Math.min(2, normalizedEntries.length);
+    const loadNext = () => {
+      if (disposed || next >= normalizedEntries.length) return;
+      const source = normalizedEntries[next++].previewSource;
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = source;
+      Promise.resolve(image.decode?.()).catch(() => {}).finally(loadNext);
+    };
+    for (let index = 0; index < workers; index++) loadNext();
   }
   if ('requestIdleCallback' in window) window.requestIdleCallback(preloadListImages, { timeout: 1500 });
   else window.setTimeout(preloadListImages, 300);
@@ -481,12 +503,17 @@ export function mountGallery(host) {
   function switchView(event) {
     if (calibrationMode) return;
     listMode = event.currentTarget.dataset.view === 'list';
-    if (listMode) wheelVelocity = 0;
+    if (listMode) {
+      wheelVelocity = 0;
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
     clearListPreview({ immediate: true });
     clearHover();
     list.hidden = !listMode; host.style.visibility = listMode ? 'hidden' : 'visible';
     buttons.forEach(button => button.setAttribute('aria-pressed', String((button.dataset.view === 'list') === listMode)));
-    dirty = true; wake();
+    dirty = true;
+    if (!listMode) { last = 0; wake(); }
   }
   buttons.forEach(button => button.addEventListener('click', switchView));
   const scene = new THREE.Scene();
@@ -497,7 +524,7 @@ export function mountGallery(host) {
   const camera = new THREE.PerspectiveCamera(SPIRAL_LAYOUT.fov, 1, .1, 100);
   // The shared unit plane uses the desktop bow; compact layouts reduce its
   // world-space depth through Z scaling without rebuilding every card.
-  const geometry = new THREE.PlaneGeometry(1, 1, 32, 10);
+  const geometry = new THREE.PlaneGeometry(1, 1, 20, 6);
   const positions = geometry.attributes.position;
   for (let i = 0; i < positions.count; i++) {
     const x = positions.getX(i);
@@ -591,8 +618,15 @@ export function mountGallery(host) {
       spiralRoot.remove(card);
     });
     cards = [];
-    // Catch a resource retained by a late callback before a build switch.
-    [...resources].forEach(resource => { resource.dispose(); resources.delete(resource); resourceRefs.delete(resource); });
+  }
+
+  function cachedTexture(key, create) {
+    let texture = textureCache.get(key);
+    if (!texture) {
+      texture = retainResource(create()); // Cache owns one reference for gallery lifetime.
+      textureCache.set(key, texture);
+    }
+    return texture;
   }
 
   function updateTextureUniforms(surface, texture) {
@@ -623,7 +657,7 @@ export function mountGallery(host) {
   }
   try {
     if (new URLSearchParams(location.search).has('no-webgl')) throw new Error('Fallback requested');
-    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance', stencil: false, depth: true });
     renderer.setClearColor(0x11110f, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
   } catch { fail(); }
@@ -631,7 +665,6 @@ export function mountGallery(host) {
     const version = ++buildVersion;
     disposeBuild();
     const loader = new THREE.TextureLoader();
-    const coverRequests = new Map();
     const sequenceLength = projects.length || studyNames.length;
     const poolSize = Math.ceil(config.count / sequenceLength) * sequenceLength;
     cards = gallerySlots(poolSize).map((rawSlot, i) => {
@@ -640,28 +673,35 @@ export function mountGallery(host) {
       const group = new THREE.Group();
       const surface = retainResource(material.clone());
       if (!calibrationMode) applyFocus(surface, slot, quality, config.depth);
-      const fallbackArtwork = artwork[slot.study ?? i % artwork.length];
-      const createFallbackTexture = () => {
-        const fallbackTexture = new THREE.CanvasTexture(fallbackArtwork);
-        return configureTexture(fallbackTexture);
-      };
+      const artworkIndex = slot.study ?? i % artwork.length;
+      const createFallbackTexture = () => configureTexture(new THREE.CanvasTexture(artwork[artworkIndex]));
       // Show a deterministic 1.6 placeholder until the image has a measured
       // size. An unloaded image must never be treated as an unknown 1:1 card.
-      surface.map = retainResource(createFallbackTexture());
+      surface.map = retainResource(cachedTexture(`artwork:${artworkIndex}`, createFallbackTexture));
       updateTextureUniforms(surface, surface.map);
       surface.needsUpdate = true;
       if (slot.previewSource) {
-        let request = coverRequests.get(slot.previewSource);
-        if (!request) { request = { surfaces: new Set(), started: false }; coverRequests.set(slot.previewSource, request); }
-        request.surfaces.add(surface);
-        if (!request.started) {
-          request.started = true;
+        const cached = textureCache.get(slot.previewSource);
+        if (cached) {
+          replaceSurfaceMap(surface, cached);
+        } else if (!textureRequests.has(slot.previewSource)) {
+          // Store one shared Texture object per source; every repeated card
+          // receives a reference rather than scheduling another network/decode.
+          textureRequests.set(slot.previewSource, true);
           loader.load(slot.previewSource, loadedTexture => {
-            if (version !== buildVersion || disposed || !request.surfaces.size) { loadedTexture.dispose(); return; }
+            textureRequests.delete(slot.previewSource);
+            if (disposed) { loadedTexture.dispose(); return; }
             configureTexture(loadedTexture);
-            request.surfaces.forEach(targetSurface => replaceSurfaceMap(targetSurface, loadedTexture));
+            const shared = cachedTexture(slot.previewSource, () => loadedTexture);
+            if (shared !== loadedTexture) loadedTexture.dispose();
+            if (version !== buildVersion) return;
+            for (let cardIndex = 0; cardIndex < cards.length; cardIndex++) {
+              const target = cards[cardIndex].children[0]?.material;
+              if (target && cards[cardIndex].userData.previewSource === slot.previewSource) replaceSurfaceMap(target, shared);
+            }
             dirty = true; wake();
           }, undefined, () => {
+            textureRequests.delete(slot.previewSource);
             // The placeholder remains the visual fallback on load failure.
             if (version === buildVersion && !disposed) { dirty = true; wake(); }
           });
@@ -676,7 +716,14 @@ export function mountGallery(host) {
       surface.depthWrite = true;
       const mesh = new THREE.Mesh(geometry, surface);
       group.add(mesh);
-      group.userData = { ...slot, projectIndex: i % sequenceLength, isActive: false, focusAmount: 0 };
+      group.userData = {
+        ...slot,
+        projectIndex: i % sequenceLength,
+        baseOffset: (i - Math.floor(poolSize / 2)) * config.step,
+        isActive: false,
+        focusAmount: 0,
+        hoverProgress: 0,
+      };
       spiralRoot.add(group); return group;
     });
   }
@@ -733,7 +780,7 @@ export function mountGallery(host) {
     clickableMeshes.length = 0;
     spiralRoot.updateMatrixWorld(true);
     cards.forEach((card, i) => {
-      const baseOffset = (i - Math.floor(cards.length / 2)) * config.step;
+      const baseOffset = card.userData.baseOffset;
       const offset = wrapSpiralOffset(baseOffset + motionState.current, cards.length * config.step);
       const cardData = calibrationMode ? calibrationCardDefaults : card.userData;
       const { aspect, size, radialOffset, tiltX, tiltY, tiltZ } = cardData;
@@ -742,9 +789,25 @@ export function mountGallery(host) {
       const radius = config.radius + THREE.MathUtils.clamp(radialOffset, -.08, .08);
       const depth = config.depth || SPIRAL_DEPTH_TUNING.desktop;
       const curveScale = depth.curveStrength / SPIRAL_DEPTH_TUNING.desktop.curveStrength;
-      const transform = calculateSpiralTransform({ offset, radius, pitch: config.pitch, spread, compact: compactLayout, depth });
-      const { angle } = transform;
-      applyCardTransform(card, transform, { width: config.width * size, aspect, curveScale, tiltX, tiltY, tiltZ });
+      // This hot path deliberately writes into the existing transform objects:
+      // calculateSpiralTransform remains exported for layout consumers, but
+      // allocating its result for every card on every animation frame is not.
+      const angle = offset;
+      const sinAngle = Math.sin(angle);
+      const cosAngle = Math.cos(angle);
+      const yaw = calculateStableCardYaw(angle, compactLayout);
+      const baseCardWidth = Math.abs(config.width * size);
+      card.position.set(
+        sinAngle * radius * spread,
+        angle * config.pitch / (Math.PI * 2) * spread,
+        cosAngle * radius,
+      );
+      card.rotation.set(
+        Math.sin(angle * .72) * depth.pitchAmplitude + tiltX,
+        yaw + tiltY,
+        -sinAngle * depth.rollAmplitude + tiltZ,
+      );
+      card.scale.set(baseCardWidth, Math.abs(baseCardWidth / aspect), Math.abs(baseCardWidth * curveScale));
       const surface = card.children[0].material;
       card.updateMatrixWorld(true);
       worldPosition.copy(card.position).applyMatrix4(spiralRoot.matrixWorld);
@@ -756,20 +819,20 @@ export function mountGallery(host) {
           && Math.abs(angle - previousAngle) < config.step;
         if (continuedOnSameTurn && Number.isFinite(previousYaw)) {
           const deltaYaw = Math.atan2(
-            Math.sin(transform.rotation.yaw - previousYaw),
-            Math.cos(transform.rotation.yaw - previousYaw),
+            Math.sin(yaw - previousYaw),
+            Math.cos(yaw - previousYaw),
           );
           if (Math.abs(deltaYaw) > THREE.MathUtils.degToRad(12)) {
             console.warn('[spiral-yaw-jump]', {
               index: i,
               angle,
               previousYaw,
-              yaw: transform.rotation.yaw,
+              yaw,
               deltaYaw,
             });
           }
         }
-        card.userData.previousYaw = transform.rotation.yaw;
+        card.userData.previousYaw = yaw;
         card.userData.previousYawAngle = angle;
       }
       const absoluteOffset = Math.abs(offset);
@@ -778,9 +841,11 @@ export function mountGallery(host) {
         closestCardIndex = i;
       }
 
+      const isPotentiallyVisible = projected.z > -1.08 && projected.z < 1.08
+        && Math.abs(projected.x) < 1.45 && Math.abs(projected.y) < 1.45;
       if (calibrationMode) {
         card.userData.focusAmount = 1;
-        card.visible = projected.z > -1.08 && projected.z < 1.08 && Math.abs(projected.x) < 1.45 && Math.abs(projected.y) < 1.45;
+        card.visible = isPotentiallyVisible;
         card.renderOrder = 0;
         card.children[0].renderOrder = 0;
         surface.transparent = false;
@@ -791,6 +856,17 @@ export function mountGallery(host) {
         return;
       }
 
+      if (!isPotentiallyVisible) {
+        card.visible = false;
+        card.userData.isInteractive = false;
+        const uniforms = surface.userData.shaderUniforms;
+        if (uniforms) {
+          uniforms.spiralMotionAmount.value = 0;
+          uniforms.spiralMotionDirection.value.set(0, 0);
+        }
+        return;
+      }
+
       const focusAmount = calculateFocusAmount(offset, config.step);
       const focusScale = THREE.MathUtils.lerp(depth.minimumFocusScale, depth.maximumFocusScale, focusAmount);
       const brightness = THREE.MathUtils.lerp(depth.minimumBrightness, depth.maximumBrightness, focusAmount);
@@ -798,7 +874,7 @@ export function mountGallery(host) {
         ? THREE.MathUtils.clamp((1 - focusAmount) * .004, 0, SPIRAL_LAYOUT.focus.maxBlur)
         : 0;
       card.userData.focusAmount = focusAmount;
-      card.visible = projected.z > -1.08 && projected.z < 1.08 && Math.abs(projected.x) < 1.45 && Math.abs(projected.y) < 1.45;
+      card.visible = true;
       card.renderOrder = 0;
       // Opaque cards use the real depth buffer. A distance-derived renderOrder
       // flips as two cards cross and looks like geometry passing through.
@@ -922,8 +998,11 @@ export function mountGallery(host) {
 
   function tick(time) {
     frame = 0;
-    if (disposed || document.hidden || !renderer || canvas.hidden) return;
+    if (disposed || document.hidden || !renderer || canvas.hidden || listMode || contextLost) return;
     const dt = Math.min((time - (last || time)) / 1000, .05); last = time;
+    const frameTime = dt * 1000;
+    averageFrameTime += (frameTime - averageFrameTime) * .05;
+    updateAdaptiveQuality(time);
     let hoverAnimating = false;
     cards.forEach(card => {
       const target = card === hoveredCard ? 1 : 0;
@@ -969,14 +1048,50 @@ export function mountGallery(host) {
     if (autoMoving || hoverAnimating || state.reveal > 0 && state.reveal < 1) wake();
   }
   function wake() {
-    if (!frame && !disposed && !document.hidden && renderer && !canvas.hidden) frame = requestAnimationFrame(tick);
+    if (!frame && !disposed && !document.hidden && renderer && !canvas.hidden && !listMode && enabled && !contextLost) frame = requestAnimationFrame(tick);
+  }
+
+  function updateAdaptiveQuality(time) {
+    if (calibrationMode || time - qualityChangedAt < 5000) return;
+    const levels = ['low', 'medium', 'high'];
+    const index = levels.indexOf(quality.level);
+    if (averageFrameTime > 20) {
+      slowSince ||= time;
+      fastSince = 0;
+      if (time - slowSince >= 3000 && index > 0) setQuality(levels[index - 1], time);
+    } else if (averageFrameTime < 13.5) {
+      fastSince ||= time;
+      slowSince = 0;
+      if (time - fastSince >= 6000 && index < levels.length - 1) setQuality(levels[index + 1], time);
+    } else { slowSince = 0; fastSince = 0; }
+    if (import.meta.env.DEV && time - performanceLogAt > 1000) {
+      performanceLogAt = time;
+      console.debug('[gallery-performance]', {
+        frameMs: Number(averageFrameTime.toFixed(2)),
+        calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
+        geometries: renderer.info.memory.geometries,
+        textures: renderer.info.memory.textures,
+        programs: renderer.info.programs?.length,
+      });
+    }
+  }
+
+  function setQuality(level, time = performance.now()) {
+    if (level === quality.level) return;
+    Object.assign(quality, QUALITY_PRESETS[level], { level });
+    quality.blurEnabled.value = calibrationMode ? 0 : quality.blurSamples > 1 ? 1 : 0;
+    qualityChangedAt = time; slowSince = 0; fastSince = 0;
+    renderer.setPixelRatio(Math.min(quality.pixelRatio, compactLayout ? 1.25 : window.devicePixelRatio || 1));
+    renderer.setSize(viewportWidth, viewportHeight, false);
+    rebuild(); dirty = true;
   }
 
   function showTooltip(card) {
-    tooltipTitle.textContent = card.userData.title || 'Untitled Project';
-    tooltipThumb.src = card.userData.cover
-      || artwork[card.userData.study ?? card.userData.projectIndex % artwork.length]?.toDataURL()
-      || '';
+    const title = card.userData.title || 'Untitled Project';
+    const source = card.userData.cover || artworkSources[card.userData.study ?? card.userData.projectIndex % artwork.length] || '';
+    if (tooltipTitle.textContent !== title) tooltipTitle.textContent = title;
+    if (tooltipThumb.getAttribute('src') !== source) tooltipThumb.src = source;
     tooltip.classList.add('is-visible');
     tooltip.setAttribute('aria-hidden', 'false');
     updateTooltipPosition();
@@ -997,8 +1112,7 @@ export function mountGallery(host) {
     if (y + bounds.height > window.innerHeight - margin) y = hoverY - bounds.height - 18;
     x = THREE.MathUtils.clamp(x, margin, Math.max(margin, window.innerWidth - bounds.width - margin));
     y = THREE.MathUtils.clamp(y, margin, Math.max(margin, window.innerHeight - bounds.height - margin));
-    tooltip.style.setProperty('--pill-x', `${Math.round(x)}px`);
-    tooltip.style.setProperty('--pill-y', `${Math.round(y)}px`);
+    tooltip.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) scale(1)`;
   }
 
   function setHoveredCard(card) {
@@ -1018,7 +1132,7 @@ export function mountGallery(host) {
   }
 
   function updatePointerNdc(event) {
-    const rect = host.getBoundingClientRect();
+    const rect = stageRect;
     pointerNdc.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
     pointerNdc.y = -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
   }
@@ -1044,7 +1158,8 @@ export function mountGallery(host) {
     pointerInside = true;
     hoverX = event.clientX; hoverY = event.clientY;
     updateTooltipPosition();
-    runHoverRaycast();
+    const now = performance.now();
+    if (now - lastHoverRaycast >= HOVER_RAYCAST_INTERVAL) runHoverRaycast(now);
   }
 
   function pointerEnter(event) {
@@ -1078,6 +1193,7 @@ export function mountGallery(host) {
 
   function updateViewport() {
     const width = host.clientWidth, height = host.clientHeight;
+    stageRect = host.getBoundingClientRect();
     const nextCompact = isCompactViewport(width, height);
     const isCompactLandscape = nextCompact && width > height && height < 560;
     const next = calibrationMode
@@ -1120,7 +1236,7 @@ export function mountGallery(host) {
     if (layoutChanged || qualityChanged) {
       if (renderer && !canvas.hidden) rebuild();
     }
-    const pixelRatio = calibrationMode ? SPIRAL_LAYOUT.pixelRatio : Math.min(quality.pixelRatio, Math.max(1, window.devicePixelRatio || 1));
+    const pixelRatio = calibrationMode ? 1.5 : Math.min(quality.pixelRatio, compactLayout ? 1.25 : Math.max(1, window.devicePixelRatio || 1));
     renderer?.setPixelRatio(pixelRatio);
     renderer?.setSize(width, height, false);
     motionState.velocity = 0;
@@ -1134,7 +1250,7 @@ export function mountGallery(host) {
     motionState.velocity = 0;
     motionState.autoVelocity = 0;
     cancelAnimationFrame(frame); frame = 0; last = 0; previousCurrent = motionState.current;
-    if (!document.hidden) { dirty = true; wake(); }
+    if (!document.hidden && !listMode) { dirty = true; wake(); }
   }
   let resumeAfterContextRestore = false;
   function lost(event) {
@@ -1142,7 +1258,7 @@ export function mountGallery(host) {
     resumeAfterContextRestore = enabled;
     contextLost = true;
     wheelVelocity = 0;
-    clearHover(); fail();
+    clearHover(); cancelAnimationFrame(frame); frame = 0; fail();
   }
   function restored() {
     if (disposed || !contextLost) return;
@@ -1160,6 +1276,7 @@ export function mountGallery(host) {
     if (resizeFrame) return;
     resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; updateViewport(); });
   }
+  const resizeObserver = new ResizeObserver(queueResize);
   host.addEventListener('pointerenter', pointerEnter);
   host.addEventListener('pointermove', hover);
   host.addEventListener('pointerleave', stagePointerLeave);
@@ -1167,6 +1284,7 @@ export function mountGallery(host) {
   host.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('webglcontextlost', lost); canvas.addEventListener('webglcontextrestored', restored);
   motion.addEventListener?.('change', motionChanged);
+  resizeObserver.observe(host);
   window.addEventListener('resize', queueResize); document.addEventListener('visibilitychange', visibility);
   updateViewport();
   return {
@@ -1201,6 +1319,7 @@ export function mountGallery(host) {
       host.removeEventListener('wheel', onWheel);
       host.removeEventListener('pointerleave', stagePointerLeave); canvas.removeEventListener('webglcontextrestored', restored);
       motion.removeEventListener?.('change', motionChanged);
+      resizeObserver.disconnect();
       window.removeEventListener('resize', queueResize); document.removeEventListener('visibilitychange', visibility);
       buttons.forEach(button => button.removeEventListener('click', switchView));
       clearListPreview({ immediate: true });
@@ -1212,7 +1331,10 @@ export function mountGallery(host) {
       listIndex.removeEventListener('click', handleListClick);
       list.removeEventListener('scroll', queuePreviewPosition);
       list.replaceChildren();
-      tooltip.remove(); tooltipStyle.remove(); disposeBuild(); geometry.dispose(); material.dispose(); renderer?.dispose();
+      tooltip.remove(); tooltipStyle.remove(); disposeBuild();
+      textureCache.forEach(texture => releaseResource(texture));
+      textureCache.clear(); textureRequests.clear();
+      geometry.dispose(); material.dispose(); renderer?.dispose();
     },
   };
 }

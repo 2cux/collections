@@ -376,9 +376,10 @@ body { overflow: hidden; }
 .gallery-list-dimmer { position:fixed; z-index:1; inset:0; background:rgba(0,0,0,.48); opacity:0; pointer-events:none; transition:opacity 320ms cubic-bezier(.22,1,.36,1); }
 .gallery-list.has-active-project .gallery-list-dimmer { opacity:1; }
 .gallery-list-preview { --preview-aspect:1.6; position:fixed; left:50%; top:50%; z-index:3; width:clamp(300px,32vw,560px); max-height:calc(100vh - 36px); aspect-ratio:var(--preview-aspect); transform:translate3d(-50%,-50%,0); pointer-events:none; overflow:visible; opacity:0; visibility:hidden; }
-.gallery-list-preview-layer { position:absolute; inset:0; overflow:hidden; border-radius:18px; background:#111; opacity:0; will-change:clip-path,opacity,transform,filter; }
+.gallery-list-preview-layer { position:absolute; inset:0; overflow:hidden; border-radius:18px; background:#111; opacity:0; contain:paint; }
+.gallery-list-preview-layer.is-animating { will-change:clip-path,opacity,transform,filter; }
 .gallery-list-preview-layer img { display:block; width:100%; height:100%; object-fit:cover; }
-.gallery-list-index { position:relative; z-index:4; width:100%; min-height:100%; padding:clamp(42px,6vh,90px) clamp(20px,4vw,72px) clamp(70px,10vh,140px); display:flex; flex-direction:column; align-items:center; gap:clamp(8px,1.15vh,18px); }
+.gallery-list-index { position:relative; z-index:4; width:100%; min-height:100%; padding:clamp(42px,6vh,90px) clamp(20px,4vw,72px) clamp(70px,10vh,140px); display:flex; flex-direction:column; align-items:center; gap:clamp(8px,1.15vh,18px); contain:layout style; }
 .gallery-list-project { position:relative; z-index:2; display:block; width:fit-content; max-width:min(92vw,1500px); padding:0; border:0; color:rgba(255,255,255,.96); background:none; text-align:center; text-decoration:none; cursor:pointer; transition:color 280ms cubic-bezier(.22,1,.36,1),opacity 280ms cubic-bezier(.22,1,.36,1),transform 320ms cubic-bezier(.22,1,.36,1); }
 .gallery-list-project-title { display:block; font-family:Arial,Helvetica,sans-serif; font-size:clamp(44px,5vw,94px); font-weight:400; line-height:1.03; letter-spacing:-.055em; white-space:normal; text-wrap:balance; }
 .gallery-list.has-active-project .gallery-list-project:not(.is-active) { color:rgba(255,255,255,.26); opacity:1; }
