@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { gallerySlots, projects } from './projects.js';
+import { mountHoverImg } from './components/block/hover-img.js';
 import { createArtwork, studyNames } from './artwork.js';
 
 // Recycle only outside the visible stage, equally in either scroll direction.
@@ -601,6 +602,17 @@ export function mountGallery(host) {
   listIndex.addEventListener('focusout', handleListFocusOut);
   listIndex.addEventListener('click', handleListClick);
   listScroll.addEventListener('scroll', queuePreviewPosition, { passive: true });
+  // Replace the previous static list index with the reusable Hover Image
+  // presentation, while leaving spiral rendering and its data pipeline intact.
+  const unmountListHoverImg = mountHoverImg(list, {
+    projects: normalizedEntries.map((entry, index) => ({
+      title: entry.title,
+      label: entry.label || entry.subtitle || `Visual Study · ${String(index + 1).padStart(2, '0')}`,
+      imageSrc: resolveProjectPreviewSource(entry, index),
+    })),
+    className: 'gallery-hover-img',
+    isContained: false,
+  });
   function switchView(event) {
     if (calibrationMode) return;
     listMode = event.currentTarget.dataset.view === 'list';
@@ -614,6 +626,7 @@ export function mountGallery(host) {
     if (listMode) { listPreviewState.disposed = false; listPreviewState.transitionSerial += 1; }
     clearHover();
     list.hidden = !listMode; host.style.visibility = listMode ? 'hidden' : 'visible';
+    shell.classList.toggle('is-list-mode', listMode);
     buttons.forEach(button => button.setAttribute('aria-pressed', String((button.dataset.view === 'list') === listMode)));
     dirty = true;
     if (!listMode) { last = 0; wake(); }
@@ -1434,6 +1447,7 @@ export function mountGallery(host) {
       listIndex.removeEventListener('focusout', handleListFocusOut);
       listIndex.removeEventListener('click', handleListClick);
       listScroll.removeEventListener('scroll', queuePreviewPosition);
+      unmountListHoverImg();
       list.replaceChildren();
       tooltip.remove(); tooltipStyle.remove(); disposeBuild();
       textureCache.forEach(texture => releaseResource(texture));
