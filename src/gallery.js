@@ -665,6 +665,7 @@ export function mountGallery(host) {
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
   let hoverX = 0, hoverY = 0;
+  let tooltipWidth = 0, tooltipHeight = 0;
   const tooltipStyle = document.createElement('style');
   tooltipStyle.dataset.spiralTooltipStyle = '';
   tooltipStyle.textContent = `
@@ -925,7 +926,10 @@ export function mountGallery(host) {
       );
       card.scale.set(baseCardWidth, Math.abs(baseCardWidth / aspect), Math.abs(baseCardWidth * curveScale));
       const surface = card.children[0].material;
-      card.updateMatrixWorld(true);
+      // Cards are direct children of spiralRoot, whose matrix is up to date
+      // before this loop. Projecting the card origin does not require a full
+      // card matrix update; defer that work until a visible card needs its
+      // final transform for rendering and raycasting below.
       worldPosition.copy(card.position).applyMatrix4(spiralRoot.matrixWorld);
       const projected = projectedPosition.copy(worldPosition).project(camera);
       if (import.meta.env.DEV) {
@@ -1206,8 +1210,8 @@ export function mountGallery(host) {
   function showTooltip(card) {
     const title = card.userData.title || 'Untitled Project';
     const source = card.userData.cover || artworkSources[card.userData.study ?? card.userData.projectIndex % artwork.length] || '';
-    if (tooltipTitle.textContent !== title) tooltipTitle.textContent = title;
-    if (tooltipThumb.getAttribute('src') !== source) tooltipThumb.src = source;
+    if (tooltipTitle.textContent !== title) { tooltipTitle.textContent = title; tooltipWidth = 0; }
+    if (tooltipThumb.getAttribute('src') !== source) { tooltipThumb.src = source; tooltipWidth = 0; }
     tooltip.classList.add('is-visible');
     tooltip.setAttribute('aria-hidden', 'false');
     updateTooltipPosition();
@@ -1221,13 +1225,20 @@ export function mountGallery(host) {
   function updateTooltipPosition() {
     if (!hoveredCard || !tooltip.classList.contains('is-visible')) return;
     const margin = 12;
-    const bounds = tooltip.getBoundingClientRect();
+    // Reading the layout on every WebGL frame can force synchronous style
+    // calculation. The pill size changes only when its content or viewport
+    // changes, so retain the measurement between pointer updates.
+    if (!tooltipWidth || !tooltipHeight) {
+      const bounds = tooltip.getBoundingClientRect();
+      tooltipWidth = bounds.width;
+      tooltipHeight = bounds.height;
+    }
     let x = hoverX + 18;
     let y = hoverY + 20;
-    if (x + bounds.width > window.innerWidth - margin) x = hoverX - bounds.width - 18;
-    if (y + bounds.height > window.innerHeight - margin) y = hoverY - bounds.height - 18;
-    x = THREE.MathUtils.clamp(x, margin, Math.max(margin, window.innerWidth - bounds.width - margin));
-    y = THREE.MathUtils.clamp(y, margin, Math.max(margin, window.innerHeight - bounds.height - margin));
+    if (x + tooltipWidth > window.innerWidth - margin) x = hoverX - tooltipWidth - 18;
+    if (y + tooltipHeight > window.innerHeight - margin) y = hoverY - tooltipHeight - 18;
+    x = THREE.MathUtils.clamp(x, margin, Math.max(margin, window.innerWidth - tooltipWidth - margin));
+    y = THREE.MathUtils.clamp(y, margin, Math.max(margin, window.innerHeight - tooltipHeight - margin));
     tooltip.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) scale(1)`;
   }
 
@@ -1310,6 +1321,8 @@ export function mountGallery(host) {
   function updateViewport() {
     const width = host.clientWidth, height = host.clientHeight;
     stageRect = host.getBoundingClientRect();
+    tooltipWidth = 0;
+    tooltipHeight = 0;
     const nextCompact = isCompactViewport(width, height);
     const isCompactLandscape = nextCompact && width > height && height < 560;
     const next = calibrationMode

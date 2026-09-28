@@ -1,11 +1,16 @@
 import "./styles.css";
 import { mountIntro } from "./intro.js";
 import { mountGallery } from "./gallery.js";
+import { mountSpotlightGrid } from "./spotlight-grid.js";
 
-const gallery = mountGallery(document.querySelector('.gallery-stage'));
+const home = document.querySelector('#home');
+const gallery = mountGallery(home.querySelector('.gallery-stage'));
+const unmountSpotlightGrid = mountSpotlightGrid({
+  host: home,
+  layer: home.querySelector('.gallery-grid'),
+});
 const calibrationMode = new URLSearchParams(location.search).get('spiral-calibration') === '1';
 const intro = document.querySelector('#intro');
-const home = document.querySelector('#home');
 let unmountIntro;
 if (calibrationMode) {
   const stage = home.querySelector('.gallery-stage');
@@ -27,6 +32,6 @@ if (calibrationMode) {
 } else {
   unmountIntro = mountIntro({ intro, home, enterButton: document.querySelector('#enter-site'), homeFocusTarget: document.querySelector('.gallery-stage'), gallery });
 }
-const unmount = () => { unmountIntro(); gallery.dispose(); };
+const unmount = () => { unmountIntro(); unmountSpotlightGrid(); gallery.dispose(); };
 if (import.meta.hot) import.meta.hot.dispose(unmount);
 window.addEventListener('pagehide', event => { if (!event.persisted) unmount(); }, { once: true });

@@ -34,9 +34,9 @@ export function mountHoverImg(container, { projects = [], className = '', isCont
   const yTo = gsap.quickTo(thumbnail, 'y', { duration: 0.4, ease: 'power3.out' });
   let activeIndex = -1;
   const move = event => {
-    const rootRect = root.getBoundingClientRect();
     let x = event.clientX, y = event.clientY;
     if (isContained) {
+      const rootRect = root.getBoundingClientRect();
       x = event.clientX - rootRect.left;
       y = event.clientY - rootRect.top;
     }
