@@ -27,6 +27,16 @@
     </style>
   </head>
   <body>
+    <main class="welcome-page" aria-label="个人主页">
+      <section class="card greeting-card" aria-labelledby="greeting-title">
+        <div class="greeting-avatar">
+          <img class="greeting-cat" src="/media/greeting-avatar.png" alt="金色头发、猫耳的可爱卡通形象" width="1254" height="1254" />
+          <svg class="avatar-sparkle" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1q1 10 11 11-10 1-11 11Q11 13 1 12 11 11 12 1Z" fill="currentColor" /></svg>
+        </div>
+        <h1 id="greeting-title" class="greeting-title">Good Afternoon</h1>
+        <p class="greeting-message">I’m <span class="greeting-name">Cao Bo</span>, Nice to<br />meet you!</p>
+      </section>
+    </main>
     <section id="intro" class="intro-overlay" aria-labelledby="intro-title" data-scene="welcome">
       <h1 id="intro-title" class="visually-hidden">欢迎，我是曹波，这是我的个人网站。</h1>
       <div class="intro-video-frame">
@@ -48,3 +58,4 @@
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
+
