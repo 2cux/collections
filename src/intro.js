@@ -1,16 +1,19 @@
-import { createTransition } from './transition.js';
-
 export const INTRO_VIDEO = { duration: 8.5, buttonStart: 7.02, buttonReveal: .68 };
 
-export function mountIntro({ intro, home, enterButton, homeFocusTarget, gallery }) {
+export function mountIntro({ intro, enterButton }) {
   const video = intro?.querySelector('video');
-  if (!video || !home || !enterButton) return () => {};
-  const skip = intro.querySelector('#skip-intro'), query = new URLSearchParams(location.search);
+  if (!video || !enterButton) return () => {};
+  const query = new URLSearchParams(location.search);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const reduceMotion = () => reduced.matches || (import.meta.env.DEV && query.has('reduced-motion'));
   let disposed = false, entered = false, ready = false, staticFinal = false;
   let timeout, frame, resumeVideo = false;
-  const transition = createTransition({ intro, home, gallery, onComplete: finish });
+  let entryAnimations = [];
+
+  function cancelEntry() {
+    entryAnimations.forEach(animation => animation.cancel());
+    entryAnimations = [];
+  }
 
   function clearTimeouts() { clearTimeout(timeout); }
   function stopFrames() {
@@ -55,14 +58,35 @@ export function mountIntro({ intro, home, enterButton, homeFocusTarget, gallery 
   function finish() {
     intro.hidden = true; intro.setAttribute('aria-hidden', 'true');
     document.documentElement.classList.remove('is-intro-active');
-    home.removeAttribute('inert'); home.classList.add('is-ready');
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#11110f');
-    homeFocusTarget?.focus({ preventScroll: true });
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#fbf6ed');
+    document.activeElement?.blur();
   }
   function enter() {
     if (!ready || entered || disposed) return;
     entered = true; enterButton.disabled = true;
-    clearTimeouts(); stopFrames(); video.pause(); transition.start(reduceMotion());
+    clearTimeouts(); stopFrames(); video.pause();
+    intro.dataset.phase = 'entering';
+    intro.setAttribute('inert', '');
+    document.activeElement?.blur();
+    const minimal = reduceMotion();
+    const easing = 'cubic-bezier(0.22, 1, 0.36, 1)';
+    const picture = intro.querySelector('.intro-video-frame');
+    const pictureAnimation = picture.animate(
+      minimal
+        ? [{ opacity: 1 }, { opacity: 0 }]
+        : [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(1.035)' }],
+      { duration: minimal ? 160 : 800, easing, fill: 'forwards' },
+    );
+    const overlayAnimation = intro.animate(
+      [{ opacity: 1 }, { opacity: 0 }],
+      { duration: minimal ? 160 : 1100, delay: minimal ? 0 : 80, easing, fill: 'forwards' },
+    );
+    entryAnimations = [pictureAnimation, overlayAnimation];
+    overlayAnimation.finished.then(() => {
+      if (disposed || !entered || !entryAnimations.includes(overlayAnimation)) return;
+      finish();
+      cancelEntry();
+    }).catch(() => {}); // Replay or unmount can cancel an unfinished transition.
   }
   function play() {
     if (disposed || entered || staticFinal) return;
@@ -82,7 +106,8 @@ export function mountIntro({ intro, home, enterButton, homeFocusTarget, gallery 
   }
   function onMotion() {
     if (!reduceMotion()) return;
-    if (!entered) showFinal(); else transition.reduce();
+    if (!entered) showFinal();
+    else entryAnimations.forEach(animation => animation.finish());
   }
   function visibility() {
     if (document.hidden) {
@@ -93,14 +118,15 @@ export function mountIntro({ intro, home, enterButton, homeFocusTarget, gallery 
   }
   function replay() {
     if (disposed) return;
-    clearTimeouts(); stopFrames(); transition.reset();
+    clearTimeouts(); stopFrames(); cancelEntry();
     entered = false; ready = false; staticFinal = false;
     intro.hidden = false; intro.removeAttribute('aria-hidden');
+    intro.removeAttribute('inert');
     intro.classList.remove('is-static-final', 'is-button-ready');
     intro.dataset.phase = 'playing'; intro.dataset.scene = 'welcome';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f7efe1');
     enterButton.disabled = true; enterButton.setAttribute('aria-hidden', 'true');
-    document.documentElement.classList.add('is-intro-active'); home.setAttribute('inert', '');
+    document.documentElement.classList.add('is-intro-active');
     video.currentTime = 0;
     if (reduceMotion()) showFinal(); else { waiting(); play(); }
   }
@@ -108,27 +134,28 @@ export function mountIntro({ intro, home, enterButton, homeFocusTarget, gallery 
   video.addEventListener('playing', playing); video.addEventListener('timeupdate', syncVideo);
   video.addEventListener('ended', ended); video.addEventListener('error', showFinal);
   video.addEventListener('waiting', waiting);
-  enterButton.addEventListener('click', enter); skip.addEventListener('click', onSkip);
+  enterButton.addEventListener('click', enter);
   document.addEventListener('keydown', onKey); document.addEventListener('visibilitychange', visibility);
   reduced.addEventListener('change', onMotion);
   const debug = { replay, skip: onSkip };
   if (import.meta.env.DEV) window.__intro = debug;
 
   // Every page load starts a new intro, including reloads in the same tab.
-  document.documentElement.classList.add('is-intro-active'); home.setAttribute('inert', '');
+  document.documentElement.classList.add('is-intro-active');
   intro.dataset.phase = 'playing';
   video.currentTime = 0;
   if (reduceMotion() || query.get('intro-state') === 'final') showFinal();
   else { waiting(); play(); }
   return () => {
-    disposed = true; clearTimeouts(); stopFrames(); video.pause(); transition.dispose();
+    disposed = true; clearTimeouts(); stopFrames(); cancelEntry(); video.pause();
+    intro.removeAttribute('inert');
     video.removeEventListener('playing', playing); video.removeEventListener('timeupdate', syncVideo);
     video.removeEventListener('ended', ended); video.removeEventListener('error', showFinal);
     video.removeEventListener('waiting', waiting);
-    enterButton.removeEventListener('click', enter); skip.removeEventListener('click', onSkip);
+    enterButton.removeEventListener('click', enter);
     document.removeEventListener('keydown', onKey); document.removeEventListener('visibilitychange', visibility);
     reduced.removeEventListener('change', onMotion);
     if (window.__intro === debug) delete window.__intro;
-    document.documentElement.classList.remove('is-intro-active'); home.removeAttribute('inert');
+    document.documentElement.classList.remove('is-intro-active');
   };
 }

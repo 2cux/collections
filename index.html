@@ -15,11 +15,7 @@
         margin: 0;
         min-width: 320px;
         min-height: 100%;
-        background: #11110f;
-      }
-
-      #home {
-        opacity: 0;
+        background: #fbf6ed;
       }
 
       #intro {
@@ -31,29 +27,6 @@
     </style>
   </head>
   <body>
-    <main id="home" class="gallery-shell" inert>
-      <div class="gallery-grid" aria-hidden="true">
-        <div class="spotlight-grid-layer"></div>
-        <div class="spotlight-grid-glow"></div>
-      </div>
-      <div class="gallery-brand" aria-label="曹波">CAO BO</div>
-      <header class="gallery-views split-showcase" aria-label="展示视图">
-        <button class="split-showcase-card split-showcase-card-left" type="button" aria-pressed="true" data-view="spiral">
-          <span class="split-showcase-title">spiral</span>
-        </button>
-        <span class="split-showcase-divider" aria-hidden="true"></span>
-        <button class="split-showcase-card split-showcase-card-right" type="button" aria-pressed="false" data-view="list">
-          <span class="split-showcase-title">list</span>
-        </button>
-      </header>
-      <section class="gallery-stage" tabindex="0" aria-label="螺旋画廊，当前展示抽象视觉预览。使用滚轮、上下方向键或纵向触摸拖动浏览。">
-        <canvas aria-hidden="true"></canvas>
-        <div class="gallery-fallback" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-      </section>
-      <section class="gallery-list" aria-label="作品列表" hidden></section>
-      <footer class="gallery-footer"><span>CAO BO © 2026</span><span>视觉预览 · 滚动探索</span></footer>
-    </main>
-
     <section id="intro" class="intro-overlay" aria-labelledby="intro-title" data-scene="welcome">
       <h1 id="intro-title" class="visually-hidden">欢迎，我是曹波，这是我的个人网站。</h1>
       <div class="intro-video-frame">
@@ -63,13 +36,11 @@
         <img class="intro-final-poster" src="/media/intro-final.jpg" alt="" aria-hidden="true" width="1920" height="1080" />
         <button id="enter-site" class="intro-enter-button" type="button" aria-hidden="true" disabled>点击进入</button>
       </div>
-      <button id="skip-intro" class="intro-skip" type="button">跳过动画</button>
     </section>
 
     <noscript>
       <style>
-        #intro { display: none; }
-        #home { opacity: 1; transform: none; }
+        .intro-final-poster { visibility: visible; } .intro-video { visibility: hidden; }
       </style>
       <p class="no-script-message">请启用 JavaScript 以进入网站。</p>
     </noscript>
