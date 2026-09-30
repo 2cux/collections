@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#11110f" />
+    <meta name="theme-color" content="#f7efe1" />
     <meta
       name="description"
       content="曹波的个人网站：软件工程与 AI 探索。"
@@ -26,7 +26,7 @@
         position: fixed;
         z-index: 10;
         inset: 0;
-        background: #11110f;
+        background: var(--intro-backdrop, #f7efe1);
       }
     </style>
   </head>
@@ -36,7 +36,7 @@
         <div class="spotlight-grid-layer"></div>
         <div class="spotlight-grid-glow"></div>
       </div>
-      <div class="gallery-brand" aria-label="曹波"></div>
+      <div class="gallery-brand" aria-label="曹波">CAO BO</div>
       <header class="gallery-views split-showcase" aria-label="展示视图">
         <button class="split-showcase-card split-showcase-card-left" type="button" aria-pressed="true" data-view="spiral">
           <span class="split-showcase-title">spiral</span>
@@ -54,58 +54,16 @@
       <footer class="gallery-footer"><span>CAO BO © 2026</span><span>视觉预览 · 滚动探索</span></footer>
     </main>
 
-    <section
-      id="intro"
-      class="intro-overlay"
-      aria-labelledby="intro-title"
-      aria-describedby="intro-subtitle"
-    >
-      <div class="intro-stage">
-        <div class="intro-composition" data-intro-composition>
-          <div class="intro-graphic-position" aria-hidden="true">
-            <svg class="intro-graphic" viewBox="0 0 240 100" role="presentation">
-              <defs>
-                <clipPath id="intro-graphic-clip">
-                  <rect class="intro-graphic-clip" x="70" y="0" width="100" height="100" rx="50" ry="50"></rect>
-                </clipPath>
-              </defs>
-              <rect class="intro-graphic-solid" x="0" y="0" width="240" height="100" fill="#2d8cff" clip-path="url(#intro-graphic-clip)"></rect>
-              <g class="intro-graphic-colorway" clip-path="url(#intro-graphic-clip)">
-                <rect x="0" y="0" width="240" height="100" fill="#2d8cff"></rect>
-                <path d="M0 0H104V100H0Z" fill="#7654e8"></path>
-                <path d="M18 87 Q75 18 136 84" fill="none" stroke="#17224b" stroke-width="16" stroke-linecap="round"></path>
-                <circle cx="161" cy="33" r="21" fill="#62d36f"></circle>
-                <path d="M177 -10L240 16V100H193L164 48Z" fill="#ff6b4a"></path>
-              </g>
-            </svg>
-          </div>
-          <div class="intro-frame">
-            <div class="intro-hero-text" id="intro-title">
-              <span class="intro-line-mask intro-hello-mask">
-                <span class="intro-line intro-hello" data-intro-copy="greeting"></span>
-              </span>
-              <span class="intro-line-mask intro-name-mask">
-                <span class="intro-line intro-name" data-intro-copy="name"></span>
-              </span>
-            </div>
-
-            <div class="intro-welcome">
-              <div class="intro-orb-target" aria-hidden="true">
-                <canvas id="intro-canvas" class="intro-canvas"></canvas>
-                <div class="intro-fallback-orb"><span class="fallback-eye fallback-eye-left"></span><span class="fallback-eye fallback-eye-right"></span><span class="fallback-mouth"></span></div>
-              </div>
-            <div class="intro-final-copy" id="intro-subtitle">
-              <p class="intro-final-description" data-intro-copy="finalDescription"></p>
-            </div>
-
-            <button id="enter-site" class="intro-cta" type="button" aria-label="进入网站" aria-hidden="true" disabled>
-              <span data-intro-copy="action"></span>
-            </button>
-            </div>
-          </div>
-        </div>
-        <button id="skip-intro" class="intro-skip" type="button">skip intro</button>
+    <section id="intro" class="intro-overlay" aria-labelledby="intro-title" data-scene="welcome">
+      <h1 id="intro-title" class="visually-hidden">欢迎，我是曹波，这是我的个人网站。</h1>
+      <div class="intro-video-frame">
+        <video id="intro-video" class="intro-video" muted playsinline preload="auto" poster="/media/intro-start.jpg" disablepictureinpicture aria-hidden="true">
+          <source src="/media/cao-bo-intro.mp4" type="video/mp4" />
+        </video>
+        <img class="intro-final-poster" src="/media/intro-final.jpg" alt="" aria-hidden="true" width="1920" height="1080" />
+        <button id="enter-site" class="intro-enter-button" type="button" aria-hidden="true" disabled>点击进入</button>
       </div>
+      <button id="skip-intro" class="intro-skip" type="button">跳过动画</button>
     </section>
 
     <noscript>
