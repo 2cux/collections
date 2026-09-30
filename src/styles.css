@@ -44,6 +44,7 @@ button { -webkit-tap-highlight-color: transparent; }
   .card:hover { transform: none; }
 }
 .greeting-card {
+  position: relative;
   width: min(360px, 100%);
   padding: 30px 24px 29px;
   border: 1.5px solid #ffffffed;
@@ -77,6 +78,63 @@ button { -webkit-tap-highlight-color: transparent; }
 .greeting-title { margin: 0 0 5px; font-size: clamp(22px, 5.5vw, 25px); font-weight: 600; line-height: 1.6; letter-spacing: .3px; }
 .greeting-message { margin: 0; font-size: clamp(21px, 5.3vw, 24px); font-weight: 600; line-height: 1.65; letter-spacing: .2px; }
 .greeting-name { color: #24aaa5; font-size: 1.17em; }
+.greeting-open { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
+.greeting-open:focus-visible { outline: 2px solid #24aaa5; outline-offset: 6px; }
+.greeting-invitation { display: block; margin-top: 18px; color: #75867b; font: 12px/1.4 Arial, sans-serif; letter-spacing: .7px; }
+.greeting-invitation span { display: inline-block; margin-left: 5px; color: #24aaa5; transition: transform 250ms ease; }
+.greeting-card:has(.greeting-open:focus-visible) { box-shadow: 0 25px 65px #937d5826, inset 0 1px 0 #ffffffd9; }
+.greeting-card[hidden], .character-page[hidden] { display: none; }
+.character-page {
+  position: relative;
+  width: 100%;
+  min-height: calc(100svh - 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  padding: 54px 0 20px;
+  color: #3f5d5c;
+  animation: character-arrive 650ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.character-back { position: absolute; top: 10px; left: max(0px, calc((100% - 1040px) / 2)); display: flex; align-items: center; gap: 9px; padding: 11px 18px; border: 1px solid #ffffffd9; border-radius: 999px; background: #ffffff80; box-shadow: 0 4px 15px #937d5808; color: #617368; font: 13px/1.2 Arial, "Microsoft YaHei", sans-serif; cursor: pointer; transition: background 180ms ease, transform 180ms ease; }
+.character-back:hover { background: #ffffffd9; transform: translateX(-3px); }
+.character-back:focus-visible { outline: 2px solid #24aaa5; outline-offset: 4px; }
+.character-heading { text-align: center; }
+.character-eyebrow { color: #839283; font-size: 10px; font-weight: 600; letter-spacing: 3px; }
+.character-heading h1 { margin: 12px 0 8px; font: 600 clamp(25px, 5vw, 34px)/1.5 "Segoe Print", "Bradley Hand", cursive; }
+.character-heading h1 span { color: #24aaa5; }
+.character-heading p { margin: 0; color: #839283; font: 13px/1.6 "Microsoft YaHei", sans-serif; letter-spacing: 1px; }
+.character-stage { position: relative; isolation: isolate; margin: 22px 0 14px; width: min(430px, 84vw, 50svh); aspect-ratio: var(--character-aspect, 1514 / 1460); }
+.character-halo { position: absolute; z-index: -1; inset: 7% 4% 0; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #fff8d6c9, #f8eab799 65%, #f8eab733); box-shadow: 0 15px 75px #e2cc6c1a; }
+.character-art-host, .character-art { display: block; width: 100%; height: 100%; }
+.character-art { overflow: visible; filter: drop-shadow(0 12px 14px #877b5020); }
+.character-breath { transform-box: view-box; transform-origin: 50% 93%; animation: character-breathe 4.8s ease-in-out infinite; }
+.character-star { position: absolute; pointer-events: none; color: #c8b96e; }
+.character-star-one { top: 19%; right: 0; font-size: 24px; }
+.character-star-two { top: 72%; left: -3%; font-size: 29px; color: #a1bb9c; }
+.character-hint { display: flex; align-items: center; gap: 8px; margin: 0; color: #7d8a7d; font: 12px/1.7 "Microsoft YaHei", sans-serif; letter-spacing: .5px; }
+.character-hint-dot { width: 5px; height: 5px; background: #69ada0; border-radius: 50%; box-shadow: 0 0 0 4px #69ada010; }
+@keyframes character-arrive { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes character-breathe { 0%, 100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-4px) scaleY(1.008); } }
+@media (hover: hover) and (pointer: fine) {
+  .greeting-card:hover .greeting-invitation span { transform: translate(2px, -2px); }
+}
+@media (max-width: 480px) {
+  .character-page { padding-top: 68px; }
+  .character-back { top: 0; }
+  .character-stage { width: min(86vw, 49svh); }
+}
+@media (max-height: 540px) {
+  .character-page { padding-top: 48px; }
+  .character-stage { margin: 10px 0; width: min(270px, 42svh); }
+  .character-heading h1 { margin: 4px 0; font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .character-page, .character-breath { animation: none; }
+  .greeting-invitation span, .character-back { transition: none; }
+  .character-back:hover { transform: none; }
+}
 @media (max-height: 420px) {
   body { overflow: auto; }
   .welcome-page { padding: 16px; }

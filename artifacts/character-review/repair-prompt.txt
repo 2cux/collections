@@ -1,0 +1,8 @@
+Mode: built-in image_gen edit.
+Edit target: original user-supplied avatar, then the completed-ear intermediate image.
+Final project asset: public/media/greeting-character-repaired.png
+
+Final prompt:
+Edit this exact character asset. Preserve the completed full ears, face shape and tilt, hair style and blonde/olive colors, black capsule eyes, rosy cheeks and aqua shirt. Clean up ALL stray speckles, colored glitter pixels, ragged edges and dark fringe around the outside silhouette and in gaps between hair strands. Repaint the silhouette edges as perfectly clean smooth 2D anime/vector-style curves, no distressed or rough texture. Composite the character on a perfectly uniform solid warm ivory background, exact RGB #fff8ea. This deliberate warm matte replaces transparency to guarantee that there are no black-matte edge artifacts. No shadow, no glow, no grain, no border, no text. Leave at least 5% empty ivory margin above BOTH completed ear tips and to the left/right; full head intact, both pointed cat ears completely visible. Only the shirt may end at the bottom edge. Do not redesign the character or add anything.
+
+Integration: leave the generated raster intact; use native SVG outline clipping and a head/shirt mask. Calibrate eye anchors from the new raster and normalize them to the existing rig's coordinate space. Derive the gaze center from the SVG viewBox, leaving complete ear tips and padding visible during head motion.

@@ -1,0 +1,150 @@
+import { CHARACTER_ART } from "./character-art.js";
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+// Project a point on a round face, as in the reference: the far eye narrows.
+export function projectEye(side, yaw, pitch) {
+  const radius = 440;
+  const x0 = side * 185 / radius;
+  const z0 = Math.sqrt(1 - x0 * x0);
+  const x1 = x0 * Math.cos(yaw) + z0 * Math.sin(yaw);
+  const z1 = -x0 * Math.sin(yaw) + z0 * Math.cos(yaw);
+  return {
+    x: x1 * radius,
+    y: -z1 * Math.sin(pitch) * radius,
+    width: .35 + .65 * Math.max(0, z1 * Math.cos(pitch)),
+  };
+}
+
+export function mountCharacter({ cardButton, card, scene, backButton, artHost }) {
+  artHost.innerHTML = CHARACTER_ART;
+  const viewBox = artHost.querySelector('svg').viewBox.baseVal;
+  artHost.parentElement.style.setProperty('--character-aspect', `${viewBox.width} / ${viewBox.height}`);
+  const head = artHost.querySelector('[data-character-head]');
+  const body = artHost.querySelector('[data-character-body]');
+  const eyes = [...artHost.querySelectorAll('[data-character-eye]')];
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  let active = false, disposed = false, frame = null, lastTime = 0;
+  let blinkTimer = null, blinkStart = null;
+  let x = 0, y = 0, vx = 0, vy = 0, targetX = 0, targetY = 0;
+  let stageBounds;
+  const cleanups = [];
+  const on = (target, event, handler) => {
+    target.addEventListener(event, handler);
+    cleanups.push(() => target.removeEventListener(event, handler));
+  };
+
+  function paint(blink = 1) {
+    const angle = 20 * Math.PI / 180;
+    const localX = x * Math.cos(angle) + y * Math.sin(angle);
+    const localY = -x * Math.sin(angle) + y * Math.cos(angle);
+    eyes.forEach((eye, index) => {
+      const projected = projectEye(
+        index ? 1 : -1,
+        clamp(localX, -1, 1) * .10,
+        -clamp(localY, -1, 1) * .075,
+      );
+      // Normalize width to the original neutral pose.
+      const neutral = projectEye(index ? 1 : -1, 0, 0).width;
+      eye.setAttribute('transform', `translate(${projected.x.toFixed(3)} ${projected.y.toFixed(3)}) scale(${(projected.width / neutral).toFixed(3)} ${blink.toFixed(3)})`);
+    });
+    const amount = reduced.matches ? 0 : 1;
+    head.setAttribute('transform', `translate(${x * 22 * amount} ${y * 12 * amount}) rotate(${x * 2.5 * amount} 650 1070)`);
+    body.setAttribute('transform', `translate(${x * 7 * amount} 0) rotate(${x * .6 * amount} 600 1254)`);
+  }
+
+  function scheduleFrame() {
+    if (frame == null && active && !document.hidden && !disposed) frame = requestAnimationFrame(tick);
+  }
+
+  function tick(now) {
+    frame = null;
+    if (!active || disposed || document.hidden) return;
+    const dt = Math.min((now - (lastTime || now - 16.67)) / 1000, .035);
+    lastTime = now;
+    if (reduced.matches) { x = targetX; y = targetY; vx = 0; vy = 0; }
+    else {
+      vx += ((targetX - x) * 360 - vx * 32) * dt;
+      vy += ((targetY - y) * 360 - vy * 32) * dt;
+      x += vx * dt; y += vy * dt;
+    }
+    let blink = 1;
+    if (blinkStart != null) {
+      const progress = (now - blinkStart) / 220;
+      if (progress >= 1) blinkStart = null;
+      else blink = Math.max(.06, Math.abs(2 * progress - 1));
+    }
+    paint(blink);
+    if (blinkStart != null || Math.abs(x - targetX) + Math.abs(y - targetY) + Math.abs(vx) + Math.abs(vy) > .001) scheduleFrame();
+    else { x = targetX; y = targetY; lastTime = 0; paint(); }
+  }
+
+  function queueBlink() {
+    clearTimeout(blinkTimer);
+    if (!active || document.hidden || reduced.matches) return;
+    blinkTimer = setTimeout(() => {
+      blinkStart = performance.now();
+      scheduleFrame();
+      queueBlink();
+    }, 2800 + Math.random() * 2600);
+  }
+
+  function stop() {
+    if (frame != null) cancelAnimationFrame(frame);
+    frame = null; lastTime = 0;
+    clearTimeout(blinkTimer); blinkStart = null;
+  }
+
+  function measure() {
+    if (active) stageBounds = artHost.getBoundingClientRect();
+  }
+
+  function resetGaze() { targetX = 0; targetY = 0; scheduleFrame(); }
+
+  function open() {
+    if (active || disposed || !document.querySelector('#intro').hidden) return;
+    active = true;
+    card.hidden = true; scene.hidden = false;
+    document.querySelector('main').dataset.view = 'character';
+    measure(); resetGaze(); queueBlink();
+    scene.focus({ preventScroll: true });
+  }
+
+  function close() {
+    if (!active) return;
+    active = false; stop();
+    scene.hidden = true; card.hidden = false;
+    document.querySelector('main').dataset.view = 'greeting';
+    x = y = vx = vy = targetX = targetY = 0; paint();
+    cardButton.focus({ preventScroll: true });
+  }
+
+  function pointer(event) {
+    if (!active || !stageBounds) return;
+    // The supplied portrait's face center in the padded SVG viewBox.
+    const cx = stageBounds.left + stageBounds.width * ((700 - viewBox.x) / viewBox.width);
+    const cy = stageBounds.top + stageBounds.height * ((737 - viewBox.y) / viewBox.height);
+    // Reach the same gaze range with a smaller pointer movement.
+    const distance = Math.max(stageBounds.width * .55, 95);
+    targetX = clamp((event.clientX - cx) / distance, -1, 1);
+    targetY = clamp((event.clientY - cy) / distance, -1, 1);
+    scheduleFrame();
+  }
+
+  on(cardButton, 'click', open);
+  on(backButton, 'click', close);
+  on(window, 'pointermove', pointer);
+  on(window, 'pointerdown', pointer);
+  on(document.documentElement, 'pointerleave', resetGaze);
+  on(window, 'blur', resetGaze);
+  on(window, 'resize', measure);
+  on(window, 'scroll', measure);
+  on(document, 'keydown', event => { if (event.key === 'Escape' && active) { event.preventDefault(); close(); } });
+  on(document, 'visibilitychange', () => {
+    if (document.hidden) stop();
+    else { measure(); resetGaze(); queueBlink(); }
+  });
+  on(reduced, 'change', () => { stop(); paint(); scheduleFrame(); queueBlink(); });
+  paint();
+  return () => { disposed = true; active = false; stop(); cleanups.forEach(cleanup => cleanup()); };
+}

@@ -1,62 +1,6 @@
+Port 5173 is in use, trying another one...
 
-> cao-bo-portfolio-intro@0.1.0 dev
-> vite --host 127.0.0.1
+  VITE v7.3.6  ready in 335 ms
 
-
-  VITE v7.3.6  ready in 2932 ms
-
-  ➜  Local:   http://127.0.0.1:5173/
+  ➜  Local:   http://127.0.0.1:5174/
   ➜  press h + enter to show help
-09:42:11 [vite] (client) page reload index.html
-09:42:11 [vite] (client) hmr update /src/styles.css
-09:42:37 [vite] (client) page reload src/main.js
-09:45:42 [vite] (client) page reload src/components/block/hover-img.js
-09:45:42 [vite] (client) page reload src/gallery.js
-09:45:42 [vite] (client) page reload index.html
-09:45:42 [vite] (client) page reload src/main.js
-09:45:42 [vite] (client) hmr update /src/styles.css
-09:51:01 [vite] (client) page reload src/components/block/hover-img.js
-09:51:02 [vite] (client) page reload src/gallery.js
-09:51:02 [vite] (client) hmr update /src/styles.css
-09:52:01 [vite] (client) hmr update /src/components/block/hover-img.css
-09:55:36 [vite] (client) hmr update /src/components/block/hover-img.css
-09:55:36 [vite] (client) hmr update /src/styles.css
-09:57:04 [vite] (client) hmr update /src/components/block/hover-img.css
-09:58:49 [vite] (client) page reload src/gallery.js
-09:58:49 [vite] (client) hmr update /src/components/block/hover-img.css
-10:44:55 [vite] (client) page reload index.html
-10:44:55 [vite] (client) hmr update /src/styles.css
-10:45:20 [vite] (client) hmr update /src/styles.css
-10:46:22 [vite] (client) hmr update /src/styles.css
-10:48:36 [vite] (client) page reload index.html
-10:48:36 [vite] (client) hmr update /src/styles.css
-10:52:08 [vite] (client) hmr update /src/styles.css
-11:00:34 [vite] (client) page reload src/main.js
-11:00:34 [vite] (client) hmr update /src/styles.css
-11:03:34 [vite] (client) page reload src/halftone-cursor.js
-11:04:14 [vite] (client) page reload src/halftone-cursor.js
-11:04:15 [vite] (client) page reload src/main.js
-11:04:15 [vite] (client) hmr update /src/styles.css
-11:04:16 [vite] (client) page reload src/halftone-cursor.js
-11:09:33 [vite] (client) page reload index.html
-11:09:33 [vite] (client) page reload src/main.js
-11:09:33 [vite] (client) hmr update /src/styles.css
-11:35:32 [vite] (client) page reload index.html
-11:35:32 [vite] (client) page reload src/main.js
-11:35:32 [vite] (client) hmr update /src/styles.css
-11:38:32 [vite] (client) page reload src/main.js
-11:38:32 [vite] (client) hmr update /src/styles.css
-11:38:50 [vite] (client) page reload src/ripple-grid.js
-11:39:15 [vite] (client) page reload src/ripple-grid.js
-11:41:44 [vite] (client) page reload src/ripple-grid.js
-11:44:01 [vite] (client) page reload src/main.js
-11:45:58 [vite] (client) page reload index.html
-11:46:48 [vite] (client) page reload src/main.js
-11:46:48 [vite] (client) hmr update /src/styles.css
-11:49:36 [vite] (client) page reload index.html
-11:50:03 [vite] (client) hmr update /src/styles.css
-11:50:37 [vite] (client) hmr update /src/styles.css
-11:55:07 [vite] (client) page reload src/spotlight-grid.js
-11:55:07 [vite] (client) page reload src/gallery.js
-11:55:24 [vite] (client) page reload src/gallery.js
-11:55:56 [vite] (client) page reload src/components/block/hover-img.js

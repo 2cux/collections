@@ -1,5 +1,6 @@
 import "./styles.css";
 import { mountIntro } from "./intro.js";
+import { mountCharacter } from "./character.js";
 const intro = document.querySelector('#intro');
 const greeting = document.querySelector('#greeting-title');
 function updateGreeting() {
@@ -12,8 +13,16 @@ updateGreeting();
 const greetingTimer = window.setInterval(updateGreeting, 30_000);
 document.addEventListener('visibilitychange', updateGreeting);
 const unmount = mountIntro({ intro, enterButton: document.querySelector('#enter-site') });
+const unmountCharacter = mountCharacter({
+  cardButton: document.querySelector('#open-character'),
+  card: document.querySelector('.greeting-card'),
+  scene: document.querySelector('#character-page'),
+  backButton: document.querySelector('#back-to-greeting'),
+  artHost: document.querySelector('#character-art-host'),
+});
 function dispose() {
   unmount();
+  unmountCharacter();
   window.clearInterval(greetingTimer);
   document.removeEventListener('visibilitychange', updateGreeting);
 }

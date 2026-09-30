@@ -35,6 +35,23 @@
         </div>
         <h1 id="greeting-title" class="greeting-title">Good Afternoon</h1>
         <p class="greeting-message">I’m <span class="greeting-name">Cao Bo</span>, Nice to<br />meet you!</p>
+        <span class="greeting-invitation" aria-hidden="true">Click to say hello <span>↗</span></span>
+        <button id="open-character" class="greeting-open" type="button" aria-label="和卡通小伙伴打个招呼" aria-controls="character-page"></button>
+      </section>
+      <section id="character-page" class="character-page" aria-labelledby="character-title" tabindex="-1" hidden>
+        <button id="back-to-greeting" class="character-back" type="button"><span aria-hidden="true">←</span> 返回</button>
+        <header class="character-heading">
+          <span class="character-eyebrow">A LITTLE COMPANY</span>
+          <h1 id="character-title">Nice to see <span>you.</span></h1>
+          <p>很高兴，又见到你。</p>
+        </header>
+        <div class="character-stage">
+          <div class="character-halo" aria-hidden="true"></div>
+          <div id="character-art-host" class="character-art-host"></div>
+          <span class="character-star character-star-one" aria-hidden="true">✦</span>
+          <span class="character-star character-star-two" aria-hidden="true">✧</span>
+        </div>
+        <p class="character-hint"><span class="character-hint-dot" aria-hidden="true"></span>移动鼠标，和我打个招呼</p>
       </section>
     </main>
     <section id="intro" class="intro-overlay" aria-labelledby="intro-title" data-scene="welcome">
