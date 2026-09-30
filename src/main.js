@@ -1,6 +1,8 @@
 import "./styles.css";
 import { mountIntro } from "./intro.js";
 import { mountCharacter } from "./character.js";
+import { mountLikes } from "./likes.js";
+const unmountLikes = mountLikes();
 const intro = document.querySelector('#intro');
 const greeting = document.querySelector('#greeting-title');
 function updateGreeting() {
@@ -75,6 +77,7 @@ function dispose() {
   contactToast.textContent = '';
   unmount();
   unmountCharacter();
+  unmountLikes();
   window.clearInterval(greetingTimer);
   document.removeEventListener('visibilitychange', updateGreeting);
 }
