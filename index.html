@@ -28,16 +28,26 @@
   </head>
   <body>
     <main class="welcome-page" aria-label="个人主页">
-      <section class="card greeting-card" aria-labelledby="greeting-title">
-        <div class="greeting-avatar">
-          <img class="greeting-cat" src="/media/greeting-avatar.png" alt="金色头发、猫耳的可爱卡通形象" width="1254" height="1254" />
-          <svg class="avatar-sparkle" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1q1 10 11 11-10 1-11 11Q11 13 1 12 11 11 12 1Z" fill="currentColor" /></svg>
-        </div>
-        <h1 id="greeting-title" class="greeting-title">Good Afternoon</h1>
-        <p class="greeting-message">I’m <span class="greeting-name">Cao Bo</span>, Nice to<br />meet you!</p>
-        <span class="greeting-invitation" aria-hidden="true">Click to say hello <span>↗</span></span>
-        <button id="open-character" class="greeting-open" type="button" aria-label="和卡通小伙伴打个招呼" aria-controls="character-page"></button>
-      </section>
+      <div class="greeting-home">
+        <section class="card greeting-card" aria-labelledby="greeting-title">
+          <div class="greeting-avatar">
+            <img class="greeting-cat" src="/media/greeting-avatar.png" alt="金色头发、猫耳的可爱卡通形象" width="1254" height="1254" />
+            <svg class="avatar-sparkle" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1q1 10 11 11-10 1-11 11Q11 13 1 12 11 11 12 1Z" fill="currentColor" /></svg>
+          </div>
+          <h1 id="greeting-title" class="greeting-title">Good Afternoon</h1>
+          <p class="greeting-message">I’m <span class="greeting-name">Cao Bo</span>, Nice to<br />meet you!</p>
+          <span class="greeting-invitation" aria-hidden="true">Click to say hello <span>↗</span></span>
+          <button id="open-character" class="greeting-open" type="button" aria-label="和卡通小伙伴打个招呼" aria-controls="character-page"></button>
+        </section>
+        <nav class="greeting-links" aria-label="联系曹波">
+          <a class="greeting-link" href="https://github.com/2cux" target="_blank" rel="noopener noreferrer" aria-label="GitHub：2cux（在新标签页打开）" title="GitHub · 2cux">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .75a11.25 11.25 0 0 0-3.56 21.92c.56.1.77-.24.77-.54v-2.1c-3.13.68-3.79-1.33-3.79-1.33-.51-1.3-1.25-1.65-1.25-1.65-1.02-.7.08-.69.08-.69 1.13.08 1.72 1.16 1.72 1.16 1 1.72 2.63 1.22 3.27.93.1-.73.39-1.22.71-1.5-2.5-.29-5.13-1.25-5.13-5.56 0-1.23.44-2.23 1.16-3.01-.12-.29-.5-1.43.11-2.98 0 0 .95-.3 3.09 1.15a10.76 10.76 0 0 1 5.62 0c2.15-1.45 3.09-1.15 3.09-1.15.61 1.55.23 2.69.11 2.98.73.78 1.16 1.78 1.16 3.01 0 4.32-2.63 5.27-5.14 5.55.4.35.76 1.03.76 2.08v3.11c0 .3.2.65.77.54A11.25 11.25 0 0 0 12 .75Z" /></svg>
+          </a>
+          <button id="copy-qq-email" class="greeting-link" type="button" aria-label="复制 QQ 邮箱：cb1690015395@qq.com" title="复制 QQ 邮箱 · cb1690015395@qq.com">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 6.5 5a2.5 2.5 0 0 0 3 0L20 7" /></svg>
+          </button>
+        </nav>
+      </div>
       <section id="character-page" class="character-page" aria-labelledby="character-title" tabindex="-1" hidden>
         <button id="back-to-greeting" class="character-back" type="button"><span aria-hidden="true">←</span> 返回</button>
         <header class="character-heading">
@@ -54,6 +64,7 @@
         <p class="character-hint"><span class="character-hint-dot" aria-hidden="true"></span>移动鼠标，和我打个招呼</p>
       </section>
     </main>
+    <div id="contact-toast" class="contact-toast" role="status" aria-live="polite" aria-atomic="true"></div>
     <section id="intro" class="intro-overlay" aria-labelledby="intro-title" data-scene="welcome">
       <h1 id="intro-title" class="visually-hidden">欢迎，我是曹波，这是我的个人网站。</h1>
       <div class="intro-video-frame">

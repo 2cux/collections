@@ -4,3 +4,11 @@ Port 5173 is in use, trying another one...
 
   ➜  Local:   http://127.0.0.1:5174/
   ➜  press h + enter to show help
+18:42:03 [vite] (client) page reload index.html
+18:43:56 [vite] (client) page reload index.html
+18:43:56 [vite] (client) hmr update /src/styles.css
+18:44:19 [vite] (client) page reload index.html
+18:44:28 [vite] (client) page reload index.html
+18:47:12 [vite] (client) page reload index.html
+18:47:12 [vite] (client) page reload src/main.js
+18:47:12 [vite] (client) hmr update /src/styles.css

@@ -126,6 +126,7 @@ button { -webkit-tap-highlight-color: transparent; }
   .character-stage { width: min(86vw, 49svh); }
 }
 @media (max-height: 540px) {
+  body { overflow: auto; }
   .character-page { padding-top: 48px; }
   .character-stage { margin: 10px 0; width: min(270px, 42svh); }
   .character-heading h1 { margin: 4px 0; font-size: 24px; }
@@ -160,3 +161,63 @@ button { -webkit-tap-highlight-color: transparent; }
 .intro-enter-button:hover { background:#935d44; }
 .intro-enter-button:disabled { pointer-events:none; }
 @media (prefers-reduced-motion: reduce) { .intro-overlay,.intro-enter-button { transition:none; } }
+
+/* Contact links share the greeting card's soft glass finish. */
+.greeting-home { width: min(360px, 100%); }
+.greeting-home .greeting-card { width: 100%; }
+.greeting-home[hidden] { display: none; }
+.greeting-links { display: flex; justify-content: center; gap: 14px; margin-top: 22px; }
+.greeting-link {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border: 1px solid #ffffffed;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ffffff8c, #f4faf580);
+  color: #57736b;
+  box-shadow: 0 6px 20px #937d580d, inset 0 1px 0 #ffffffb3;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 220ms ease, color 220ms ease, background 220ms ease, box-shadow 220ms ease;
+}
+.greeting-link svg { display: block; width: 22px; height: 22px; }
+.greeting-link:focus-visible { outline: 2px solid #24aaa5; outline-offset: 4px; }
+@media (hover: hover) and (pointer: fine) {
+  .greeting-link:hover { transform: translateY(-3px); color: #24aaa5; background: #ffffffc9; box-shadow: 0 9px 24px #937d581a; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .greeting-link { transition: none; }
+  .greeting-link:hover { transform: none; }
+}
+button.greeting-link { padding: 0; cursor: pointer; }
+.contact-toast {
+  position: fixed;
+  z-index: 20;
+  left: 50%;
+  bottom: max(32px, env(safe-area-inset-bottom));
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 13px 20px;
+  border: 1px solid #ffffffed;
+  border-radius: 18px;
+  background: #f8fcf7ed;
+  color: #3f5d5c;
+  box-shadow: 0 8px 30px #937d581a;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  font: 13px/1.6 "Microsoft YaHei", Arial, sans-serif;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.contact-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+.clipboard-helper { position: fixed; left: -9999px; top: 0; font-size: 16px; }
+@media (prefers-reduced-motion: reduce) {
+  .contact-toast { transition: none; }
+}
