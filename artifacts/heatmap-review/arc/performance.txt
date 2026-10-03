@@ -1,0 +1,6 @@
+Expansion performance review (Chromium/Edge, 1702 × 1043, pointer hovered before clicking)
+Measurement window: click through 800ms, using Chrome DevTools Performance.getMetrics.
+Before: LayoutCount 52; LayoutDuration 0.035441s; RecalcStyleDuration 0.496118s.
+After: LayoutCount 6; LayoutDuration 0.007175s; RecalcStyleDuration 0.023237s.
+Changes: no per-frame width/height animation; batched geometry reads; suspend competing hover transforms; mount Arc grid only after the outer transition; static placeholder uses the same CSS module geometry.
+Browser timings vary with device and run; counts and durations are measured samples, not an FPS guarantee.

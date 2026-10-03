@@ -249,3 +249,109 @@ button.greeting-link { padding: 0; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .contact-toast { transition: none; }
 }
+/* Arc's original heatmap, with scoped cream and warm sage tokens. */
+.greeting-home { width: min(1160px, 100%); display: grid; grid-template-columns: minmax(0, 756px) 360px; column-gap: 44px; align-items: center; }
+.greeting-card { grid-column: 2; grid-row: 1; }
+.greeting-links { grid-column: 2; grid-row: 2; }
+.activity-card {
+  --foreground: #536554; --background: #fbf8ee; --surface: #f9f7ef; --accent: #879a6c;
+  --heatmap-surface: #faf8f0; --text-secondary: #7d8271; --text-muted: #939783;
+  --border-strong: #cfd6c0; --focus-ring: #879a6c; --shadow-raised: 0 8px 24px #4b583526;
+  --space-2: 8px; --space-3: 12px; --space-4: 20px; --text-sm: 13px; --text-xs: 11px;
+  --leading-body: 1.5; --radius-control: 12px; --duration-fast: 160ms; --duration-spring: 500ms;
+  --ease-standard: cubic-bezier(.22,1,.36,1); --ease-enter: cubic-bezier(.16,1,.3,1); --ease-spring: cubic-bezier(.22,1,.36,1);
+  position: relative; grid-column: 1; grid-row: 1; min-width: 0; padding: 30px 30px 24px;
+  border: 1.5px solid #ffffffed; border-radius: 32px; background: linear-gradient(145deg, #ffffff8c, #faf9ef85);
+  box-shadow: 0 18px 60px #937d5810, inset 0 1px 0 #ffffffb3; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); color: var(--foreground);
+}
+.activity-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
+.activity-eyebrow { color: #92917c; font: 9px/1.5 Arial, sans-serif; letter-spacing: 2.2px; }
+.activity-header h2 { margin: 6px 0 0; font: 600 24px/1.5 "Segoe Print", "Bradley Hand", cursive; }
+.activity-header h2 > span { color: #a9b48b; }
+.activity-profile { flex-shrink: 0; text-decoration: none; color: #7c846b; border: 1px solid #ffffffbd; background: #f4f4e8a6; border-radius: 999px; padding: 8px 11px; font: 11px/1.4 Arial, sans-serif; }
+.activity-profile span { margin-left: 7px; }
+.activity-profile:hover { background: #ffffffcc; }
+.activity-profile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+.activity-component { min-height: 191px; }
+.activity-range { display: flex; padding: 3px; border: 1px solid #e2e5d5; border-radius: 999px; background: #eeeee2aa; gap: 2px; }
+.activity-range button { border: 0; border-radius: 999px; background: transparent; padding: 5px 10px; color: #939783; font: 11px/1.4 Arial, "Microsoft YaHei", sans-serif; cursor: pointer; transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease; }
+.activity-range button[aria-pressed="true"] { background: #fffdf5; color: #536554; box-shadow: 0 2px 6px #67764c12; }
+.activity-range button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.activity-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #d9decb66; padding-top: 15px; margin-top: 20px; }
+.activity-note { color: #7e876e; font: 12px/1.5 "Segoe Print", "Bradley Hand", cursive; }
+.activity-sync { color: #999b89; font: 9px/1.5 Arial, "Microsoft YaHei", sans-serif; }
+.activity-loading { min-height: 170px; color: #7d8271; font-size: 12px; }
+.like-dock { position: fixed; left: auto; top: auto; right: max(28px, 7vw); bottom: max(36px, 12svh); }
+@media (max-width: 1050px) {
+  body { overflow-y: auto; }
+  .welcome-page { padding: 40px 24px; }
+  .greeting-home { width: min(756px, 100%); grid-template-columns: 1fr; gap: 0; margin-bottom: 0; }
+  .greeting-card { grid-column: 1; grid-row: 1; width: min(360px, 100%) !important; justify-self: center; }
+  .greeting-links { grid-column: 1; grid-row: 2; margin-top: 22px; }
+  .activity-card { grid-column: 1; grid-row: 3; margin-top: 30px; }
+  .like-dock { position: static; grid-column: 1; grid-row: 4; justify-self: center; margin-top: 26px; }
+}
+@media (max-width: 480px) {
+  .welcome-page { padding: 28px 16px; }
+  .activity-card { padding: 24px 18px 20px; border-radius: 28px; --text-sm: 12px; --text-xs: 10px; --space-4: 18px; }
+  .activity-header { margin-bottom: 22px; }
+  .activity-header h2 { font-size: 21px; }
+  .activity-eyebrow { font-size: 8px; letter-spacing: 1.8px; }
+  .activity-component { min-height: 180px; }
+}
+@media (prefers-reduced-motion: reduce) { .activity-range button { transition: none; } }
+.activity-card .activity-arc { --level-0: #edeae0; }
+/* The greeting stays centered until the visitor opens the activity module. */
+.greeting-home:not(.is-activity-expanded) > .greeting-card { grid-column: 1 / -1; justify-self: center; width: min(360px, 100%); }
+.greeting-home:not(.is-activity-expanded) > .greeting-links { grid-column: 1 / -1; justify-self: center; }
+.greeting-home:not(.is-activity-expanded) > .activity-card { position: absolute; left: calc(50% - 452px); top: 0; bottom: 70px; margin-block: auto; height: max-content; transform: none; width: 240px; padding: 0; border-radius: 28px; background: linear-gradient(145deg, #ffffff73, #faf9ef66); box-shadow: 0 12px 40px #937d580a, inset 0 1px 0 #ffffffb3; }
+.activity-card[data-animating] { overflow: hidden; }
+.activity-launcher { display: block; width: 100%; padding: 24px; border: 0; border-radius: inherit; text-align: left; color: #617260; background: transparent; cursor: pointer; }
+.activity-launcher h2 { margin: 14px 0 12px; font: 600 19px/1.55 "Segoe Print", "Bradley Hand", "Chalkboard SE", cursive; }
+.activity-launcher-total { display: block; color: #8a907d; font: 11px/1.7 Arial, "Microsoft YaHei", sans-serif; }
+.activity-launcher-total strong { font-weight: 500; font-size: 16px; color: #6f815e; font-variant-numeric: tabular-nums; }
+.activity-launcher-hint { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; color: #929781; font: 10px/1.5 Arial, "Microsoft YaHei", sans-serif; letter-spacing: .5px; }
+.activity-launcher-hint span { font-size: 16px; color: #95a47e; }
+.activity-launcher-icon { display: grid; grid-template-columns: repeat(3, 6px); gap: 3px; width: max-content; }
+.activity-launcher-icon i { width: 6px; height: 6px; border-radius: 2px; background: #dce1cf; }
+.activity-launcher-icon i:nth-child(3n) { background: #b8c6a1; }
+.activity-launcher-icon i:nth-child(5), .activity-launcher-icon i:nth-child(7) { background: #95a47e; }
+.activity-launcher:hover { background: #fffdf54d; }
+.activity-launcher:focus-visible, .activity-collapse:focus-visible { outline: 2px solid #879a6c; outline-offset: 5px; }
+.activity-collapse { flex-shrink: 0; border: 1px solid #ffffffbd; background: #f4f4e8a6; border-radius: 999px; padding: 8px 11px; color: #7c846b; font: 11px/1.4 Arial, "Microsoft YaHei", sans-serif; cursor: pointer; }
+.activity-collapse span { margin-left: 5px; }
+.activity-header h2 { font-family: "Segoe Print", "Bradley Hand", "Chalkboard SE", cursive; font-size: 22px; }
+.activity-note { font-family: Arial, sans-serif; font-size: 11px; text-decoration: none; }
+.activity-panel { animation: activity-panel-arrive 350ms both; }
+@keyframes activity-panel-arrive { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 1050px) {
+  .greeting-home:not(.is-activity-expanded) > .activity-card { position: relative; left: auto; top: auto; bottom: auto; transform: none; grid-column: 1; grid-row: 3; width: min(280px, 100%); justify-self: center; margin: 28px 0 0; height: auto; }
+  .activity-launcher { padding: 20px 24px; }
+  .activity-launcher h2 { font-size: 18px; margin: 10px 0; }
+
+  .activity-launcher-icon { display: none; }
+  .activity-launcher-hint { margin-top: 12px; }
+}
+@media (max-width: 480px) { .activity-header h2 { font-size: 18px; } }
+@media (prefers-reduced-motion: reduce) { .activity-panel { animation: none; } }
+/* Match the greeting's gentle lift while preserving the module's positioning. */
+.activity-card { transition: translate 320ms cubic-bezier(.22,1,.36,1), scale 320ms cubic-bezier(.22,1,.36,1), box-shadow 320ms ease; }
+.activity-launcher-hint span { transition: transform 250ms ease; }
+@media (hover: hover) and (pointer: fine) {
+  .greeting-home > .activity-card:not([data-animating]):hover { translate: 0 -7px; scale: 1.015; box-shadow: 0 25px 65px #937d5826, inset 0 1px 0 #ffffffd9; }
+  .activity-launcher:hover .activity-launcher-hint span { transform: translate(2px, -2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-card, .activity-launcher-hint span { transition: none; }
+  .greeting-home > .activity-card:not([data-animating]):hover { translate: none; scale: none; }
+  .activity-launcher:hover .activity-launcher-hint span { transform: none; }
+}
+/* Expansion owns the transforms until it finishes; hover resumes afterwards. */
+.greeting-home[data-layout-animating] > .activity-card,
+.greeting-home[data-layout-animating] > .greeting-card,
+.greeting-home[data-layout-animating] > .greeting-links {
+  transition: none; transform: none; translate: none; scale: none;
+  transform-origin: 0 0; will-change: transform;
+}
+.greeting-home[data-layout-animating] .activity-panel { animation: none; opacity: 0; }
+.greeting-home[data-layout-animating] #activity-root { visibility: hidden; }

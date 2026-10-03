@@ -3,12 +3,14 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { createLikesHandler } from './likes.js';
+import { createActivityHandler } from './activity.js';
 
 const root = resolve('dist');
 const likes = await createLikesHandler();
+const activity = createActivityHandler();
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.mp4': 'video/mp4', '.svg': 'image/svg+xml' };
 const server = createServer((req, res) => {
-  likes.handler(req, res, async () => {
+  activity(req, res, () => likes.handler(req, res, async () => {
     try {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }
       const path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
@@ -31,7 +33,7 @@ const server = createServer((req, res) => {
       if (req.method === 'HEAD') res.end();
       else createReadStream(file, { start, end }).on('error', () => res.destroy()).pipe(res);
     } catch { if (!res.headersSent) res.writeHead(404).end(); else res.destroy(); }
-  }).catch(() => { if (!res.headersSent) res.writeHead(500).end(); else res.destroy(); });
+  })).catch(() => { if (!res.headersSent) res.writeHead(500).end(); else res.destroy(); });
 });
 server.once('close', likes.close);
 server.listen(Number(process.env.PORT || 8787), process.env.HOST || '0.0.0.0', () => console.log(`Website: http://localhost:${server.address().port}`));

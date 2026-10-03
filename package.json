@@ -12,5 +12,10 @@
   },
   "devDependencies": {
     "vite": "^7.1.3"
+  },
+  "dependencies": {
+    "motion": "^13.4.6",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   }
 }

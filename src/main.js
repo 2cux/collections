@@ -2,6 +2,8 @@ import "./styles.css";
 import { mountIntro } from "./intro.js";
 import { mountCharacter } from "./character.js";
 import { mountLikes } from "./likes.js";
+import { mountActivity } from "./activity.jsx";
+const unmountActivity = mountActivity();
 const unmountLikes = mountLikes();
 const intro = document.querySelector('#intro');
 const greeting = document.querySelector('#greeting-title');
@@ -78,6 +80,7 @@ function dispose() {
   unmount();
   unmountCharacter();
   unmountLikes();
+  unmountActivity();
   window.clearInterval(greetingTimer);
   document.removeEventListener('visibilitychange', updateGreeting);
 }
