@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/start.js",
-    "test:likes": "node --test server/likes.test.js"
+    "test:likes": "node --test server/likes.test.js",
+    "test:activity": "node --test server/activity.test.js src/activity-sync.test.js",
+    "sync:activity": "node scripts/sync-github-activity.js"
   },
   "devDependencies": {
     "vite": "^7.1.3"

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { ActivityHeatmap } from './components/activity-heatmap/activity-heatmap';
 import arcStyles from './components/activity-heatmap/activity-heatmap.module.css';
+import { loadActivityYear, syncDelay } from './activity-sync';
 
 function clearCompanionExit(element) {
   element.removeAttribute('data-exiting');
@@ -18,7 +19,7 @@ function HeatmapPlaceholder({ days, period, actions }) {
     <div className={arcStyles.legend} style={{ height: 20 }} />
   </div>;
 }
-function GitHubActivity({ data }) {
+function GitHubActivity({ data, onRefresh, refreshing }) {
   const [expanded, setExpanded] = useState(false);
   const [ready, setReady] = useState(false);
   const [period, setPeriod] = useState(String(data.years[0].year));
@@ -126,7 +127,7 @@ function GitHubActivity({ data }) {
     <div className="activity-component">
       {ready ? <ActivityHeatmap days={days} label={`2cux 的 GitHub 贡献：${period}`} period={period} thresholds={thresholds} className="activity-arc" selectedDate={selectedDate} onSelectDate={setSelectedDate} actions={actions} /> : <HeatmapPlaceholder days={days} period={period} actions={actions} />}
     </div>
-    <div className="activity-bottom"><a className="activity-note" href="https://github.com/2cux" target="_blank" rel="noopener noreferrer">@2cux ↗</a><span className="activity-sync">{calendar.stale ? `最近同步 ${new Date(calendar.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · 已保存记录` : `最近同步 ${new Date(calendar.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · 每天自动同步`}</span></div>
+    <div className="activity-bottom"><a className="activity-note" href="https://github.com/2cux" target="_blank" rel="noopener noreferrer">@2cux ↗</a><span className="activity-sync" role="status">最近同步 {new Date(calendar.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {refreshing ? '正在同步…' : calendar.stale ? '暂未同步成功，将自动重试' : '每小时自动检查'}</span><button className="activity-refresh" type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? '同步中…' : '立即同步'}</button></div>
   </div>;
 }
 
@@ -134,46 +135,46 @@ export function mountActivity() {
   const card = document.querySelector('.activity-card');
   const root = createRoot(document.querySelector('#activity-root'));
   const controller = new AbortController();
-  let disposed = false, pending = false, lastDay = null, timer, previousData;
-  const today = () => new Date().toLocaleDateString('en-CA');
+  let disposed = false, pending = false, timer, previousData, failures = 0, lastAttempt = 0, nextAttempt = 0;
+  function render() {
+    if (!disposed && previousData) root.render(<GitHubActivity data={previousData} onRefresh={() => load(true)} refreshing={pending} />);
+  }
   function schedule(delay) {
     clearTimeout(timer);
-    const next = new Date(); next.setHours(24, 5, 0, 0);
-    timer = setTimeout(() => { if (document.hidden) schedule(); else load(); }, delay ?? Math.max(1000, +next - Date.now()));
+    nextAttempt = Date.now() + delay;
+    timer = setTimeout(() => { if (!document.hidden) load(); }, delay);
   }
-  async function loadYear(year) {
-    for (const url of [`/api/github/activity?year=${year}`, `/data/github-activity-${year}.json`]) {
-      try {
-        const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) throw new Error('Activity unavailable');
-        const data = await response.json();
-        const length = new Date(Date.UTC(year, 1, 29)).getUTCMonth() === 1 ? 366 : 365;
-        if (data.year !== year || !Array.isArray(data.days) || data.days.length !== length || data.days.some(day => !/^\d{4}-\d{2}-\d{2}$/.test(day.date) || !day.date.startsWith(String(year)) || !Number.isInteger(day.count) || day.count < 0)) throw new Error('Invalid calendar');
-        data.days.sort((a, b) => a.date.localeCompare(b.date));
-        const previous = previousData?.years.find(item => item.year === year);
-        if (previous && Date.parse(previous.fetchedAt) > Date.parse(data.fetchedAt)) return { ...previous, stale: true };
-        return { ...data, stale: data.stale || url.startsWith('/data/') };
-      } catch { if (disposed) throw new Error('Disposed'); }
-    }
-    throw new Error('Year unavailable');
-  }
-  async function load() {
+  async function load(force = false) {
     if (pending || disposed) return;
-    pending = true; let failed = false;
+    pending = true; lastAttempt = Date.now(); let failed = false;
+    render();
     try {
       const year = new Date().getFullYear();
-      const years = await Promise.all([year, year - 1, year - 2].map(loadYear));
-      if (!disposed) { previousData = { years }; lastDay = today(); root.render(<GitHubActivity data={previousData} />); card.setAttribute('aria-busy', 'false'); }
+      const results = await Promise.allSettled([year, year - 1, year - 2].map(year => loadActivityYear(year, { signal: controller.signal, force, previous: previousData?.years.find(item => item.year === year) })));
+      const years = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+      if (!years.length || years[0].year !== year) throw new Error('Current year unavailable');
+      failed = results.some(result => result.status === 'rejected') || years.some(item => item.stale);
+      if (!disposed) { previousData = { years }; card.setAttribute('aria-busy', 'false'); }
     } catch {
       if (disposed) return;
       failed = true;
       card.setAttribute('aria-busy', 'false');
-      if (previousData) return;
+      if (previousData) { previousData = { years: previousData.years.map(item => ({ ...item, stale: true })) }; return; }
       root.render(<p className="activity-loading" role="status">暂时无法读取贡献记录。<a href="https://github.com/2cux">查看 GitHub ↗</a></p>);
-    } finally { pending = false; if (!disposed) schedule(failed ? 60_000 : undefined); }
+    } finally { pending = false; failures = failed ? failures + 1 : 0; render(); if (!disposed) schedule(syncDelay(failed, failures)); }
   }
-  function onVisible() { if (!document.hidden && lastDay !== today()) load(); }
+  function onVisible() { if (!document.hidden && Date.now() >= nextAttempt) load(); }
+  function onOnline() { if (!document.hidden && Date.now() - lastAttempt >= 60_000) load(true); }
   document.addEventListener('visibilitychange', onVisible);
-  load();
-  return () => { disposed = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); controller.abort(); root.unmount(); };
+  window.addEventListener('online', onOnline);
+  // Show the bundled real records first, without waiting for an unreachable upstream.
+  (async () => {
+    const year = new Date().getFullYear();
+    const results = await Promise.allSettled([year, year - 1, year - 2].map(year => loadActivityYear(year, { signal: controller.signal, snapshotOnly: true })));
+    const years = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+    if (disposed) return;
+    if (years[0]?.year === year) { previousData = { years }; render(); card.setAttribute('aria-busy', 'false'); }
+    load();
+  })();
+  return () => { disposed = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('online', onOnline); controller.abort(); root.unmount(); };
 }

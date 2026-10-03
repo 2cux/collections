@@ -284,6 +284,9 @@ button.greeting-link { padding: 0; cursor: pointer; }
 .activity-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #d9decb66; padding-top: 15px; margin-top: 20px; }
 .activity-note { color: #7e876e; font: 12px/1.5 var(--font-handwritten); }
 .activity-sync { color: #999b89; font: 9px/1.5 var(--font-handwritten); }
+.activity-refresh { border: 1px solid #d9decb; border-radius: 999px; padding: 5px 10px; color: #64745c; background: #fffdf580; font: 10px/1.4 var(--font-handwritten); cursor: pointer; }
+.activity-refresh:disabled { opacity: .6; cursor: wait; }
+.activity-refresh:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .activity-loading { min-height: 170px; color: #7d8271; font-size: 12px; }
 .like-dock { position: fixed; left: auto; top: auto; right: max(28px, 7vw); bottom: max(36px, 12svh); }
 @media (max-width: 1050px) {
