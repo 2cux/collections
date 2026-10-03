@@ -357,11 +357,17 @@ button.greeting-link { padding: 0; cursor: pointer; }
 .greeting-home[data-layout-animating] #activity-root { visibility: hidden; }
 
 /* A quiet time companion, aligned with the greeting's upper edge. */
-.clock-card {
+.greeting-companion {
   position: absolute;
   top: 0;
   left: calc(50% + 212px);
   width: min(300px, calc(50vw - 236px));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.clock-card {
+  width: 100%;
   padding: 18px 24px 17px;
   border: 1.5px solid #ffffffed;
   border-radius: 26px;
@@ -380,13 +386,13 @@ button.greeting-link { padding: 0; cursor: pointer; }
 .clock-colon { padding: 0 3px; color: #88a098; }
 .clock-seconds { margin-left: 10px; color: #78958a; font-size: 20px; letter-spacing: .5px; }
 .clock-date { margin: 7px 0 0; color: #7c8878; font-size: 11px; line-height: 1.5; letter-spacing: 1px; }
-.greeting-home.is-activity-expanded > .clock-card { position: static; grid-column: 2; grid-row: 1; width: 100%; margin-bottom: 18px; }
+.greeting-home.is-activity-expanded > .greeting-companion { position: static; grid-column: 2; grid-row: 1; width: 100%; margin-bottom: 18px; }
 .greeting-home.is-activity-expanded > .greeting-card { grid-row: 2; }
 .greeting-home.is-activity-expanded > .greeting-links { grid-row: 3; }
 .greeting-home.is-activity-expanded > .activity-card { grid-row: 1 / 4; }
 @media (max-width: 1050px) {
-  .greeting-home > .clock-card,
-  .greeting-home.is-activity-expanded > .clock-card { position: static; grid-column: 1; grid-row: 1; width: min(300px, 100%); justify-self: center; margin: 0 0 20px; }
+  .greeting-home > .greeting-companion,
+  .greeting-home.is-activity-expanded > .greeting-companion { position: static; grid-column: 1; grid-row: 1; width: min(300px, 100%); justify-self: center; margin: 0 0 20px; }
   .greeting-home > .greeting-card,
   .greeting-home.is-activity-expanded > .greeting-card { grid-row: 2; }
   .greeting-home > .greeting-links,
@@ -395,4 +401,44 @@ button.greeting-link { padding: 0; cursor: pointer; }
   .greeting-home:not(.is-activity-expanded) > .activity-card,
   .greeting-home.is-activity-expanded > .activity-card { grid-row: 4; }
   .greeting-home > .like-dock { grid-row: 5; }
+}
+
+.calendar-card {
+  --foreground: #3f5d5c;
+  --text-secondary: #75867b;
+  --text-muted: #9ca596;
+  --accent: #78988a;
+  --accent-strong: #648777;
+  --accent-foreground: #fffdf7;
+  --surface-muted: #e7ecdf99;
+  --font-body: Arial, "Microsoft YaHei", sans-serif;
+  --text-base: 14px;
+  --text-sm: 12px;
+  --text-xs: 10px;
+  --leading-body: 1.5;
+  --tracking-body: .5px;
+  --radius-pill: 999px;
+  --duration-fast: 160ms;
+  --duration-spring: 420ms;
+  --ease-standard: cubic-bezier(.22, 1, .36, 1);
+  --ease-spring: cubic-bezier(.16, 1, .3, 1);
+  width: 100%;
+  padding: 18px;
+  border: 1.5px solid #ffffffed;
+  border-radius: 26px;
+  background: linear-gradient(145deg, #ffffff80, #f7faf080);
+  box-shadow: 0 12px 40px #937d580a, inset 0 1px 0 #ffffffb3;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  font-family: var(--font-body);
+}
+.calendar-card button:focus-visible { outline: 2px solid #78988a; outline-offset: 2px; }
+body:has(.greeting-home.is-activity-expanded) { overflow-y: auto; }
+
+@media (min-width: 1051px) {
+  body { overflow-y: auto; }
+  .welcome-page { min-height: max(100svh, 680px); }
+  .greeting-home.is-activity-expanded > .greeting-companion { width: min(300px, 100%); justify-self: center; }
+  .greeting-home:not(.is-activity-expanded) > .like-dock { position: absolute; left: calc(50% - 56px); right: auto; bottom: auto; top: calc(100% + 24px); }
+  .greeting-home.is-activity-expanded > .like-dock { position: static; grid-column: 2; grid-row: 4; justify-self: center; margin-top: 22px; }
 }
