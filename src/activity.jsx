@@ -79,7 +79,6 @@ function GitHubActivity({ data }) {
     card.dataset.animating = 'true';
     home.classList.toggle('is-activity-expanded', open);
     flushSync(() => { setExpanded(open); setReady(open && reduced); });
-    if (!open) home.style.setProperty('--portfolio-top', `${card.offsetTop + card.offsetHeight + 16}px`);
     if (!reduced) {
       card.dataset.animating = 'true';
       const targets = elements.map(element => element.getBoundingClientRect());
