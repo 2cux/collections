@@ -446,8 +446,7 @@ body:has(.greeting-home.is-activity-expanded) { overflow-y: auto; }
 
 /* The heatmap takes the stage; time widgets leave without taking up a row. */
 .greeting-home.is-activity-expanded > .greeting-companion { display: none; }
-.greeting-companion[data-exiting] {
-  display: flex !important;
+.greeting-companion[data-exiting], .portfolio-card[data-exiting] {
   position: fixed !important;
   left: var(--exit-x) !important;
   top: var(--exit-y) !important;
@@ -456,6 +455,8 @@ body:has(.greeting-home.is-activity-expanded) { overflow-y: auto; }
   pointer-events: none;
   z-index: 1;
 }
+.greeting-companion[data-exiting] { display: flex !important; }
+.portfolio-card[data-exiting] { display: block !important; }
 .greeting-home.is-activity-expanded > .greeting-card { grid-column: 2; grid-row: 1; }
 .greeting-home.is-activity-expanded > .greeting-links { grid-column: 2; grid-row: 2; }
 .greeting-home.is-activity-expanded > .activity-card { grid-row: 1; }
@@ -489,7 +490,7 @@ body:has(.greeting-home.is-activity-expanded) { overflow-y: auto; }
 .portfolio-card-hint { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; color: #839283; font: 10px/1.5 Arial, "Microsoft YaHei", sans-serif; letter-spacing: .5px; }
 .portfolio-card-hint span { color: #24aaa5; font-size: 16px; }
 .portfolio-card:focus-visible, .portfolio-back:focus-visible, .portfolio-tabs a:focus-visible { outline: 2px solid #24aaa5; outline-offset: 5px; }
-.greeting-home.is-activity-expanded > .portfolio-card { position: static; grid-column: 1; grid-row: 2 / 4; align-self: start; margin-top: 16px; width: 240px; }
+.greeting-home.is-activity-expanded > .portfolio-card { display: none; }
 .portfolio-page[hidden], .portfolio-panel[hidden] { display: none; }
 .portfolio-page { position: relative; align-self: start; width: min(1040px, 100%); min-height: calc(100svh - 48px); padding: 46px 0 80px; color: #3f5d5c; outline: none; }
 .portfolio-back { position: absolute; top: 12px; left: 0; display: inline-flex; align-items: center; gap: 8px; padding: 8px 0; color: #7d8a7d; font: 12px/1.5 Arial, "Microsoft YaHei", sans-serif; text-decoration: none; }
@@ -508,11 +509,9 @@ body:has(.greeting-home.is-activity-expanded) { overflow-y: auto; }
 .experience-content h1 { margin: 0; font: 500 clamp(23px, 5vw, 30px)/1.5 Arial, "Microsoft YaHei", sans-serif; letter-spacing: 2px; }
 .experience-major { margin: 12px 0 0; color: #75867b; font: 14px/1.8 Arial, "Microsoft YaHei", sans-serif; letter-spacing: 1px; }
 @media (max-width: 1050px) {
-  .greeting-home > .portfolio-card,
-  .greeting-home.is-activity-expanded > .portfolio-card { position: static; grid-column: 1; grid-row: 5; justify-self: center; width: min(280px, 100%); margin-top: 16px; padding: 20px 24px; }
+  .greeting-home > .portfolio-card { position: static; grid-column: 1; grid-row: 5; justify-self: center; width: min(280px, 100%); margin-top: 16px; padding: 20px 24px; }
   .greeting-home > .like-dock { grid-row: 6; }
-  .greeting-home.is-activity-expanded > .portfolio-card { grid-row: 4; }
-  .greeting-home.is-activity-expanded > .like-dock { grid-row: 5; }
+  .greeting-home.is-activity-expanded > .like-dock { grid-row: 4; }
   .portfolio-page { min-height: calc(100svh - 80px); }
 }
 @media (max-width: 480px) {

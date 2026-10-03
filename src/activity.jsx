@@ -4,6 +4,11 @@ import { flushSync } from 'react-dom';
 import { ActivityHeatmap } from './components/activity-heatmap/activity-heatmap';
 import arcStyles from './components/activity-heatmap/activity-heatmap.module.css';
 
+function clearCompanionExit(element) {
+  element.removeAttribute('data-exiting');
+  for (const property of ['--exit-x', '--exit-y', '--exit-width']) element.style.removeProperty(property);
+}
+
 function HeatmapPlaceholder({ days, period, actions }) {
   const weeks = Math.max(1, Math.ceil(((new Date(`${days[0]?.date}T00:00:00Z`).getUTCDay() || 0) + days.length) / 7));
   const total = days.reduce((sum, day) => sum + day.count, 0);
@@ -28,13 +33,11 @@ function GitHubActivity({ data }) {
   useLayoutEffect(() => () => {
     animations.current.forEach(animation => animation.cancel());
     const home = document.querySelector('.greeting-home');
-    const companion = home.querySelector('.greeting-companion');
-    companion.removeAttribute('data-exiting');
-    companion.removeAttribute('aria-hidden');
-    companion.inert = false;
-    companion.style.removeProperty('--exit-x');
-    companion.style.removeProperty('--exit-y');
-    companion.style.removeProperty('--exit-width');
+    for (const companion of home.querySelectorAll('.greeting-companion, .portfolio-card')) {
+      clearCompanionExit(companion);
+      companion.removeAttribute('aria-hidden');
+      companion.inert = false;
+    }
     home.classList.remove('is-activity-expanded');
     delete home.dataset.layoutAnimating;
     delete document.querySelector('.activity-card').dataset.animating;
@@ -43,8 +46,10 @@ function GitHubActivity({ data }) {
     const home = document.querySelector('.greeting-home');
     const card = document.querySelector('.activity-card');
     const companion = home.querySelector('.greeting-companion');
-    const companionRect = companion.getBoundingClientRect();
-    const companionCards = [...companion.children];
+    const portfolio = home.querySelector('.portfolio-card');
+    const companions = [companion, portfolio];
+    const companionRects = companions.map(element => element.getBoundingClientRect());
+    const companionCards = [...companion.children, portfolio];
     const companionStart = companionCards.map(element => {
       const style = getComputedStyle(element);
       return { opacity: style.opacity, transform: style.transform };
@@ -52,23 +57,29 @@ function GitHubActivity({ data }) {
     const elements = [card, home.querySelector('.greeting-card'), home.querySelector('.greeting-links'), home.querySelector('.like-dock')];
     const before = elements.map(element => element.getBoundingClientRect());
     animations.current.forEach(animation => animation.cancel());
-    companion.removeAttribute('data-exiting');
+    companions.forEach(clearCompanionExit);
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     // Float the outgoing widgets at their current position so they can fade
     // without reserving a row above the greeting in the expanded layout.
     if (open && !reduced) {
-      companion.dataset.exiting = 'true';
-      companion.style.setProperty('--exit-x', `${companionRect.x}px`);
-      companion.style.setProperty('--exit-y', `${companionRect.y}px`);
-      companion.style.setProperty('--exit-width', `${companionRect.width}px`);
+      companions.forEach((element, index) => {
+        const rect = companionRects[index];
+        element.dataset.exiting = 'true';
+        element.style.setProperty('--exit-x', `${rect.x}px`);
+        element.style.setProperty('--exit-y', `${rect.y}px`);
+        element.style.setProperty('--exit-width', `${rect.width}px`);
+      });
     }
-    companion.inert = open;
-    if (open) companion.setAttribute('aria-hidden', 'true');
-    else companion.removeAttribute('aria-hidden');
+    companions.forEach(element => {
+      element.inert = open;
+      if (open) element.setAttribute('aria-hidden', 'true');
+      else element.removeAttribute('aria-hidden');
+    });
     home.dataset.layoutAnimating = 'true';
     card.dataset.animating = 'true';
     home.classList.toggle('is-activity-expanded', open);
     flushSync(() => { setExpanded(open); setReady(open && reduced); });
+    if (!open) home.style.setProperty('--portfolio-top', `${card.offsetTop + card.offsetHeight + 16}px`);
     if (!reduced) {
       card.dataset.animating = 'true';
       const targets = elements.map(element => element.getBoundingClientRect());
@@ -87,10 +98,7 @@ function GitHubActivity({ data }) {
       const current = animations.current;
       Promise.allSettled(current.map(animation => animation.finished)).then(() => {
         if (animations.current === current) {
-          companion.removeAttribute('data-exiting');
-          companion.style.removeProperty('--exit-x');
-          companion.style.removeProperty('--exit-y');
-          companion.style.removeProperty('--exit-width');
+          companions.forEach(clearCompanionExit);
           current.forEach(animation => animation.cancel());
           flushSync(() => setReady(open));
           delete card.dataset.animating;
