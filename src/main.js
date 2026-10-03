@@ -5,6 +5,8 @@ import { mountLikes } from "./likes.js";
 import { mountActivity } from "./activity.jsx";
 import { mountClock } from "./clock.js";
 import { mountCalendar } from "./calendar.jsx";
+import { mountPortfolio } from "./portfolio.js";
+const unmountPortfolio = mountPortfolio();
 const unmountClock = mountClock();
 const unmountCalendar = mountCalendar();
 const unmountActivity = mountActivity();
@@ -87,6 +89,7 @@ function dispose() {
   unmountActivity();
   unmountClock();
   unmountCalendar();
+  unmountPortfolio();
   window.clearInterval(greetingTimer);
   document.removeEventListener('visibilitychange', updateGreeting);
 }
