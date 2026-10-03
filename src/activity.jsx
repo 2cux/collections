@@ -28,6 +28,13 @@ function GitHubActivity({ data }) {
   useLayoutEffect(() => () => {
     animations.current.forEach(animation => animation.cancel());
     const home = document.querySelector('.greeting-home');
+    const companion = home.querySelector('.greeting-companion');
+    companion.removeAttribute('data-exiting');
+    companion.removeAttribute('aria-hidden');
+    companion.inert = false;
+    companion.style.removeProperty('--exit-x');
+    companion.style.removeProperty('--exit-y');
+    companion.style.removeProperty('--exit-width');
     home.classList.remove('is-activity-expanded');
     delete home.dataset.layoutAnimating;
     delete document.querySelector('.activity-card').dataset.animating;
@@ -35,13 +42,32 @@ function GitHubActivity({ data }) {
   function toggle(open) {
     const home = document.querySelector('.greeting-home');
     const card = document.querySelector('.activity-card');
-    const elements = [card, document.querySelector('.greeting-card'), document.querySelector('.greeting-links')];
+    const companion = home.querySelector('.greeting-companion');
+    const companionRect = companion.getBoundingClientRect();
+    const companionCards = [...companion.children];
+    const companionStart = companionCards.map(element => {
+      const style = getComputedStyle(element);
+      return { opacity: style.opacity, transform: style.transform };
+    });
+    const elements = [card, home.querySelector('.greeting-card'), home.querySelector('.greeting-links'), home.querySelector('.like-dock')];
     const before = elements.map(element => element.getBoundingClientRect());
     animations.current.forEach(animation => animation.cancel());
+    companion.removeAttribute('data-exiting');
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Float the outgoing widgets at their current position so they can fade
+    // without reserving a row above the greeting in the expanded layout.
+    if (open && !reduced) {
+      companion.dataset.exiting = 'true';
+      companion.style.setProperty('--exit-x', `${companionRect.x}px`);
+      companion.style.setProperty('--exit-y', `${companionRect.y}px`);
+      companion.style.setProperty('--exit-width', `${companionRect.width}px`);
+    }
+    companion.inert = open;
+    if (open) companion.setAttribute('aria-hidden', 'true');
+    else companion.removeAttribute('aria-hidden');
     home.dataset.layoutAnimating = 'true';
     card.dataset.animating = 'true';
     home.classList.toggle('is-activity-expanded', open);
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     flushSync(() => { setExpanded(open); setReady(open && reduced); });
     if (!reduced) {
       card.dataset.animating = 'true';
@@ -52,9 +78,24 @@ function GitHubActivity({ data }) {
         const to = { translate: '0px 0px', scale: '1 1' };
         return element.animate([from, to], { duration: 650, easing: 'cubic-bezier(.22,1,.36,1)' });
       });
+      animations.current.push(...companionCards.map((element, index) => element.animate(
+        open
+          ? [companionStart[index], { opacity: 0, transform: 'translateY(-10px) scale(.98)' }]
+          : [{ opacity: 0, transform: 'translateY(10px) scale(.98)' }, { opacity: 1, transform: 'none' }],
+        { duration: open ? 220 : 320, delay: (open ? 0 : 240) + index * 45, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'both' }
+      )));
       const current = animations.current;
       Promise.allSettled(current.map(animation => animation.finished)).then(() => {
-        if (animations.current === current) { flushSync(() => setReady(open)); delete card.dataset.animating; delete home.dataset.layoutAnimating; }
+        if (animations.current === current) {
+          companion.removeAttribute('data-exiting');
+          companion.style.removeProperty('--exit-x');
+          companion.style.removeProperty('--exit-y');
+          companion.style.removeProperty('--exit-width');
+          current.forEach(animation => animation.cancel());
+          flushSync(() => setReady(open));
+          delete card.dataset.animating;
+          delete home.dataset.layoutAnimating;
+        }
       });
     } else { delete card.dataset.animating; delete home.dataset.layoutAnimating; }
     (open ? closeRef : toggleRef).current?.focus({ preventScroll: true });

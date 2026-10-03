@@ -349,7 +349,8 @@ button.greeting-link { padding: 0; cursor: pointer; }
 /* Expansion owns the transforms until it finishes; hover resumes afterwards. */
 .greeting-home[data-layout-animating] > .activity-card,
 .greeting-home[data-layout-animating] > .greeting-card,
-.greeting-home[data-layout-animating] > .greeting-links {
+.greeting-home[data-layout-animating] > .greeting-links,
+.greeting-home[data-layout-animating] > .like-dock {
   transition: none; transform: none; translate: none; scale: none;
   transform-origin: 0 0; will-change: transform;
 }
@@ -441,4 +442,27 @@ body:has(.greeting-home.is-activity-expanded) { overflow-y: auto; }
   .greeting-home.is-activity-expanded > .greeting-companion { width: min(300px, 100%); justify-self: center; }
   .greeting-home:not(.is-activity-expanded) > .like-dock { position: absolute; left: calc(50% - 56px); right: auto; bottom: auto; top: calc(100% + 24px); }
   .greeting-home.is-activity-expanded > .like-dock { position: static; grid-column: 2; grid-row: 4; justify-self: center; margin-top: 22px; }
+}
+
+/* The heatmap takes the stage; time widgets leave without taking up a row. */
+.greeting-home.is-activity-expanded > .greeting-companion { display: none; }
+.greeting-companion[data-exiting] {
+  display: flex !important;
+  position: fixed !important;
+  left: var(--exit-x) !important;
+  top: var(--exit-y) !important;
+  width: var(--exit-width) !important;
+  margin: 0 !important;
+  pointer-events: none;
+  z-index: 1;
+}
+.greeting-home.is-activity-expanded > .greeting-card { grid-column: 2; grid-row: 1; }
+.greeting-home.is-activity-expanded > .greeting-links { grid-column: 2; grid-row: 2; }
+.greeting-home.is-activity-expanded > .activity-card { grid-row: 1; }
+.greeting-home.is-activity-expanded > .like-dock { grid-row: 3; }
+@media (max-width: 1050px) {
+  .greeting-home.is-activity-expanded > .greeting-card { grid-column: 1; grid-row: 1; }
+  .greeting-home.is-activity-expanded > .greeting-links { grid-column: 1; grid-row: 2; }
+  .greeting-home.is-activity-expanded > .activity-card { grid-row: 3; }
+  .greeting-home.is-activity-expanded > .like-dock { grid-row: 4; }
 }
