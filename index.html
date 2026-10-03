@@ -29,6 +29,11 @@
   <body>
     <main class="welcome-page" aria-label="个人主页">
       <div class="greeting-home">
+        <aside class="clock-card" aria-label="本地时间">
+          <div class="clock-heading"><span class="clock-label"><span class="clock-dot" aria-hidden="true"></span>LOCAL TIME</span><span id="clock-zone" class="clock-zone"></span></div>
+          <time id="clock-time" class="clock-time"><span id="clock-hours">--</span><span class="clock-colon">:</span><span id="clock-minutes">--</span><span id="clock-seconds" class="clock-seconds">--</span></time>
+          <p id="clock-date" class="clock-date"></p>
+        </aside>
         <section class="activity-card" aria-labelledby="activity-title" aria-busy="true">
 <div id="activity-root"><p class="activity-loading" role="status">正在读取 GitHub 贡献记录…</p></div>
         </section>
