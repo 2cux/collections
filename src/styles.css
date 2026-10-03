@@ -1,6 +1,9 @@
 :root {
+  /* Shared greeting-card handwriting for all existing and future UI. */
+  --font-handwritten: "Segoe Print", "Bradley Hand", "Chalkboard SE", "KaiTi", "STKaiti", "Kaiti SC", "DFKai-SB", cursive;
+  --font-body: var(--font-handwritten);
   --page-background: #fbf6ed;
-  font-family: Arial, sans-serif;
+  font-family: var(--font-handwritten);
   font-synthesis: none;
   color-scheme: light;
   background: var(--page-background);
@@ -22,6 +25,7 @@ body {
   background-size: cover;
   background-attachment: fixed;
 }
+button, input, textarea, select { font-family: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 .welcome-page {
   min-height: 100svh;
@@ -55,7 +59,7 @@ button { -webkit-tap-highlight-color: transparent; }
   -webkit-backdrop-filter: blur(18px);
   text-align: center;
   color: #3f5d5c;
-  font-family: "Segoe Print", "Bradley Hand", "Chalkboard SE", cursive;
+  font-family: var(--font-handwritten);
 }
 .greeting-avatar {
   position: relative;
@@ -80,7 +84,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .greeting-name { color: #24aaa5; font-size: 1.17em; }
 .greeting-open { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
 .greeting-open:focus-visible { outline: 2px solid #24aaa5; outline-offset: 6px; }
-.greeting-invitation { display: block; margin-top: 18px; color: #75867b; font: 12px/1.4 Arial, sans-serif; letter-spacing: .7px; }
+.greeting-invitation { display: block; margin-top: 18px; color: #75867b; font: 12px/1.4 var(--font-handwritten); letter-spacing: .7px; }
 .greeting-invitation span { display: inline-block; margin-left: 5px; color: #24aaa5; transition: transform 250ms ease; }
 .greeting-card:has(.greeting-open:focus-visible) { box-shadow: 0 25px 65px #937d5826, inset 0 1px 0 #ffffffd9; }
 .greeting-card[hidden], .character-page[hidden] { display: none; }
@@ -97,14 +101,14 @@ button { -webkit-tap-highlight-color: transparent; }
   color: #3f5d5c;
   animation: character-arrive 650ms cubic-bezier(.22, 1, .36, 1) both;
 }
-.character-back { position: absolute; top: 10px; left: max(0px, calc((100% - 1040px) / 2)); display: flex; align-items: center; gap: 9px; padding: 11px 18px; border: 1px solid #ffffffd9; border-radius: 999px; background: #ffffff80; box-shadow: 0 4px 15px #937d5808; color: #617368; font: 13px/1.2 Arial, "Microsoft YaHei", sans-serif; cursor: pointer; transition: background 180ms ease, transform 180ms ease; }
+.character-back { position: absolute; top: 10px; left: max(0px, calc((100% - 1040px) / 2)); display: flex; align-items: center; gap: 9px; padding: 11px 18px; border: 1px solid #ffffffd9; border-radius: 999px; background: #ffffff80; box-shadow: 0 4px 15px #937d5808; color: #617368; font: 13px/1.2 var(--font-handwritten); cursor: pointer; transition: background 180ms ease, transform 180ms ease; }
 .character-back:hover { background: #ffffffd9; transform: translateX(-3px); }
 .character-back:focus-visible { outline: 2px solid #24aaa5; outline-offset: 4px; }
 .character-heading { text-align: center; }
 .character-eyebrow { color: #839283; font-size: 10px; font-weight: 600; letter-spacing: 3px; }
-.character-heading h1 { margin: 12px 0 8px; font: 600 clamp(25px, 5vw, 34px)/1.5 "Segoe Print", "Bradley Hand", cursive; }
+.character-heading h1 { margin: 12px 0 8px; font: 600 clamp(25px, 5vw, 34px)/1.5 var(--font-handwritten); }
 .character-heading h1 span { color: #24aaa5; }
-.character-heading p { margin: 0; color: #839283; font: 13px/1.6 "Microsoft YaHei", sans-serif; letter-spacing: 1px; }
+.character-heading p { margin: 0; color: #839283; font: 13px/1.6 var(--font-handwritten); letter-spacing: 1px; }
 .character-stage { position: relative; isolation: isolate; margin: 22px 0 14px; width: min(430px, 84vw, 50svh); aspect-ratio: var(--character-aspect, 1514 / 1460); }
 .character-halo { position: absolute; z-index: -1; inset: 7% 4% 0; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #fff8d6c9, #f8eab799 65%, #f8eab733); box-shadow: 0 15px 75px #e2cc6c1a; }
 .character-art-host, .character-art { display: block; width: 100%; height: 100%; }
@@ -113,7 +117,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .character-star { position: absolute; pointer-events: none; color: #c8b96e; }
 .character-star-one { top: 19%; right: 0; font-size: 24px; }
 .character-star-two { top: 72%; left: -3%; font-size: 29px; color: #a1bb9c; }
-.character-hint { display: flex; align-items: center; gap: 8px; margin: 0; color: #7d8a7d; font: 12px/1.7 "Microsoft YaHei", sans-serif; letter-spacing: .5px; }
+.character-hint { display: flex; align-items: center; gap: 8px; margin: 0; color: #7d8a7d; font: 12px/1.7 var(--font-handwritten); letter-spacing: .5px; }
 .character-hint-dot { width: 5px; height: 5px; background: #69ada0; border-radius: 50%; box-shadow: 0 0 0 4px #69ada010; }
 @keyframes character-arrive { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes character-breathe { 0%, 100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-4px) scaleY(1.008); } }
@@ -156,7 +160,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .intro-final-poster { position:absolute; inset:0; visibility:hidden; }
 .is-static-final .intro-final-poster { visibility:visible; }
 .is-static-final .intro-video { visibility:hidden; }
-.intro-enter-button { position:absolute; z-index:2; left:11.666667%; top:82.592593%; width:13.541667%; height:7.222222%; min-width:120px; min-height:44px; padding:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:999px; background:#a76c50; color:#fcf7ec; font:400 clamp(14px,1.5625cqw,30px)/1 "Microsoft YaHei",sans-serif; cursor:pointer; opacity:0; visibility:hidden; box-shadow:0 4px 12px #5b483d18; transition:background-color 180ms ease; }
+.intro-enter-button { position:absolute; z-index:2; left:11.666667%; top:82.592593%; width:13.541667%; height:7.222222%; min-width:120px; min-height:44px; padding:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:999px; background:#a76c50; color:#fcf7ec; font:400 clamp(14px,1.5625cqw,30px)/1 var(--font-handwritten); cursor:pointer; opacity:0; visibility:hidden; box-shadow:0 4px 12px #5b483d18; transition:background-color 180ms ease; }
 .is-button-ready .intro-enter-button { opacity:var(--enter-progress,1); visibility:visible; transform:translateY(calc((1 - var(--enter-progress,1)) * .729167cqw)); }
 .intro-enter-button:hover { background:#935d44; }
 .intro-enter-button:disabled { pointer-events:none; }
@@ -169,10 +173,10 @@ button { -webkit-tap-highlight-color: transparent; }
 .like-button { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; width: 112px; height: 54px; padding: 0 15px; border: 1px solid #ffffffed; border-radius: 999px; background: linear-gradient(145deg, #ffffffa6, #f4faf58c); color: #57736b; box-shadow: 0 6px 24px #937d580d, inset 0 1px 0 #ffffffb3; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); cursor: pointer; transform: translate(var(--magnet-x, 0px), var(--magnet-y, 0px)); transition: transform 240ms ease, color 240ms ease, background 240ms ease, box-shadow 240ms ease; }
 .like-heart { position: relative; display: grid; place-items: center; width: 22px; height: 22px; flex-shrink: 0; }
 .like-heart svg { width: 22px; height: 22px; transition: fill 220ms ease; }
-.like-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-family: Arial, sans-serif; }
+.like-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-family: var(--font-handwritten); }
 .like-label { font-size: 12px; letter-spacing: .5px; }
 .like-count { font-size: 11px; font-variant-numeric: tabular-nums; color: #839283; line-height: 1; max-width: 54px; overflow: hidden; text-overflow: ellipsis; }
-.like-status { color: #839283; font: 10px/1.5 Arial, "Microsoft YaHei", sans-serif; letter-spacing: .5px; text-align: center; }
+.like-status { color: #839283; font: 10px/1.5 var(--font-handwritten); letter-spacing: .5px; text-align: center; }
 .like-button.has-liked { color: #b57972; background: linear-gradient(145deg, #fffaf5d9, #f8e6df99); box-shadow: 0 6px 24px #b5797214, inset 0 1px 0 #ffffffb3; }
 .like-button.has-liked .like-heart svg { fill: #cc948a; stroke: #cc948a; }
 .like-button:focus-visible { outline: 2px solid #24aaa5; outline-offset: 5px; }
@@ -236,7 +240,7 @@ button.greeting-link { padding: 0; cursor: pointer; }
   box-shadow: 0 8px 30px #937d581a;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  font: 13px/1.6 "Microsoft YaHei", Arial, sans-serif;
+  font: 13px/1.6 var(--font-handwritten);
   text-align: center;
   overflow-wrap: anywhere;
   pointer-events: none;
@@ -265,21 +269,21 @@ button.greeting-link { padding: 0; cursor: pointer; }
   box-shadow: 0 18px 60px #937d5810, inset 0 1px 0 #ffffffb3; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); color: var(--foreground);
 }
 .activity-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
-.activity-eyebrow { color: #92917c; font: 9px/1.5 Arial, sans-serif; letter-spacing: 2.2px; }
-.activity-header h2 { margin: 6px 0 0; font: 600 24px/1.5 "Segoe Print", "Bradley Hand", cursive; }
+.activity-eyebrow { color: #92917c; font: 9px/1.5 var(--font-handwritten); letter-spacing: 2.2px; }
+.activity-header h2 { margin: 6px 0 0; font: 600 24px/1.5 var(--font-handwritten); }
 .activity-header h2 > span { color: #a9b48b; }
-.activity-profile { flex-shrink: 0; text-decoration: none; color: #7c846b; border: 1px solid #ffffffbd; background: #f4f4e8a6; border-radius: 999px; padding: 8px 11px; font: 11px/1.4 Arial, sans-serif; }
+.activity-profile { flex-shrink: 0; text-decoration: none; color: #7c846b; border: 1px solid #ffffffbd; background: #f4f4e8a6; border-radius: 999px; padding: 8px 11px; font: 11px/1.4 var(--font-handwritten); }
 .activity-profile span { margin-left: 7px; }
 .activity-profile:hover { background: #ffffffcc; }
 .activity-profile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
 .activity-component { min-height: 191px; }
 .activity-range { display: flex; padding: 3px; border: 1px solid #e2e5d5; border-radius: 999px; background: #eeeee2aa; gap: 2px; }
-.activity-range button { border: 0; border-radius: 999px; background: transparent; padding: 5px 10px; color: #939783; font: 11px/1.4 Arial, "Microsoft YaHei", sans-serif; cursor: pointer; transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease; }
+.activity-range button { border: 0; border-radius: 999px; background: transparent; padding: 5px 10px; color: #939783; font: 11px/1.4 var(--font-handwritten); cursor: pointer; transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease; }
 .activity-range button[aria-pressed="true"] { background: #fffdf5; color: #536554; box-shadow: 0 2px 6px #67764c12; }
 .activity-range button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .activity-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #d9decb66; padding-top: 15px; margin-top: 20px; }
-.activity-note { color: #7e876e; font: 12px/1.5 "Segoe Print", "Bradley Hand", cursive; }
-.activity-sync { color: #999b89; font: 9px/1.5 Arial, "Microsoft YaHei", sans-serif; }
+.activity-note { color: #7e876e; font: 12px/1.5 var(--font-handwritten); }
+.activity-sync { color: #999b89; font: 9px/1.5 var(--font-handwritten); }
 .activity-loading { min-height: 170px; color: #7d8271; font-size: 12px; }
 .like-dock { position: fixed; left: auto; top: auto; right: max(28px, 7vw); bottom: max(36px, 12svh); }
 @media (max-width: 1050px) {
@@ -307,10 +311,10 @@ button.greeting-link { padding: 0; cursor: pointer; }
 .greeting-home:not(.is-activity-expanded) > .activity-card { position: absolute; left: calc(50% - 452px); top: 0; bottom: 70px; margin-block: auto; height: max-content; transform: none; width: 240px; padding: 0; border-radius: 28px; background: linear-gradient(145deg, #ffffff73, #faf9ef66); box-shadow: 0 12px 40px #937d580a, inset 0 1px 0 #ffffffb3; }
 .activity-card[data-animating] { overflow: hidden; }
 .activity-launcher { display: block; width: 100%; padding: 24px; border: 0; border-radius: inherit; text-align: left; color: #617260; background: transparent; cursor: pointer; }
-.activity-launcher h2 { margin: 14px 0 12px; font: 600 19px/1.55 "Segoe Print", "Bradley Hand", "Chalkboard SE", cursive; }
-.activity-launcher-total { display: block; color: #8a907d; font: 11px/1.7 Arial, "Microsoft YaHei", sans-serif; }
+.activity-launcher h2 { margin: 14px 0 12px; font: 600 19px/1.55 var(--font-handwritten); }
+.activity-launcher-total { display: block; color: #8a907d; font: 11px/1.7 var(--font-handwritten); }
 .activity-launcher-total strong { font-weight: 500; font-size: 16px; color: #6f815e; font-variant-numeric: tabular-nums; }
-.activity-launcher-hint { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; color: #929781; font: 10px/1.5 Arial, "Microsoft YaHei", sans-serif; letter-spacing: .5px; }
+.activity-launcher-hint { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; color: #929781; font: 10px/1.5 var(--font-handwritten); letter-spacing: .5px; }
 .activity-launcher-hint span { font-size: 16px; color: #95a47e; }
 .activity-launcher-icon { display: grid; grid-template-columns: repeat(3, 6px); gap: 3px; width: max-content; }
 .activity-launcher-icon i { width: 6px; height: 6px; border-radius: 2px; background: #dce1cf; }
@@ -318,10 +322,10 @@ button.greeting-link { padding: 0; cursor: pointer; }
 .activity-launcher-icon i:nth-child(5), .activity-launcher-icon i:nth-child(7) { background: #95a47e; }
 .activity-launcher:hover { background: #fffdf54d; }
 .activity-launcher:focus-visible, .activity-collapse:focus-visible { outline: 2px solid #879a6c; outline-offset: 5px; }
-.activity-collapse { flex-shrink: 0; border: 1px solid #ffffffbd; background: #f4f4e8a6; border-radius: 999px; padding: 8px 11px; color: #7c846b; font: 11px/1.4 Arial, "Microsoft YaHei", sans-serif; cursor: pointer; }
+.activity-collapse { flex-shrink: 0; border: 1px solid #ffffffbd; background: #f4f4e8a6; border-radius: 999px; padding: 8px 11px; color: #7c846b; font: 11px/1.4 var(--font-handwritten); cursor: pointer; }
 .activity-collapse span { margin-left: 5px; }
-.activity-header h2 { font-family: "Segoe Print", "Bradley Hand", "Chalkboard SE", cursive; font-size: 22px; }
-.activity-note { font-family: Arial, sans-serif; font-size: 11px; text-decoration: none; }
+.activity-header h2 { font-family: var(--font-handwritten); font-size: 22px; }
+.activity-note { font-family: var(--font-handwritten); font-size: 11px; text-decoration: none; }
 .activity-panel { animation: activity-panel-arrive 350ms both; }
 @keyframes activity-panel-arrive { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 1050px) {
@@ -377,7 +381,7 @@ button.greeting-link { padding: 0; cursor: pointer; }
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   color: #3f5d5c;
-  font-family: Arial, "Microsoft YaHei", sans-serif;
+  font-family: var(--font-handwritten);
 }
 .clock-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .clock-label { display: flex; align-items: center; gap: 7px; color: #718578; font-size: 9px; letter-spacing: 1.8px; }
@@ -412,7 +416,7 @@ button.greeting-link { padding: 0; cursor: pointer; }
   --accent-strong: #648777;
   --accent-foreground: #fffdf7;
   --surface-muted: #e7ecdf99;
-  --font-body: Arial, "Microsoft YaHei", sans-serif;
+  --font-body: var(--font-handwritten);
   --text-base: 14px;
   --text-sm: 12px;
   --text-xs: 10px;
@@ -485,29 +489,29 @@ body:has(.greeting-home.is-activity-expanded) { overflow-y: auto; }
   text-decoration: none;
 }
 .portfolio-icon { display: block; width: 25px; height: 25px; color: #78988a; }
-.portfolio-card h2 { margin: 14px 0 12px; font: 600 19px/1.55 "Segoe Print", "Bradley Hand", "Chalkboard SE", cursive; }
-.portfolio-card-caption { color: #839283; font: 11px/1.7 Arial, "Microsoft YaHei", sans-serif; }
-.portfolio-card-hint { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; color: #839283; font: 10px/1.5 Arial, "Microsoft YaHei", sans-serif; letter-spacing: .5px; }
+.portfolio-card h2 { margin: 14px 0 12px; font: 600 19px/1.55 var(--font-handwritten); }
+.portfolio-card-caption { color: #839283; font: 11px/1.7 var(--font-handwritten); }
+.portfolio-card-hint { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; color: #839283; font: 10px/1.5 var(--font-handwritten); letter-spacing: .5px; }
 .portfolio-card-hint span { color: #24aaa5; font-size: 16px; }
 .portfolio-card:focus-visible, .portfolio-back:focus-visible, .portfolio-tabs a:focus-visible { outline: 2px solid #24aaa5; outline-offset: 5px; }
 .greeting-home.is-activity-expanded > .portfolio-card { display: none; }
 .portfolio-page[hidden], .portfolio-panel[hidden] { display: none; }
 .portfolio-page { position: relative; align-self: start; width: min(1040px, 100%); min-height: calc(100svh - 48px); padding: 46px 0 80px; color: #3f5d5c; outline: none; }
-.portfolio-back { position: absolute; top: 12px; left: 0; display: inline-flex; align-items: center; gap: 8px; padding: 8px 0; color: #7d8a7d; font: 12px/1.5 Arial, "Microsoft YaHei", sans-serif; text-decoration: none; }
+.portfolio-back { position: absolute; top: 12px; left: 0; display: inline-flex; align-items: center; gap: 8px; padding: 8px 0; color: #7d8a7d; font: 12px/1.5 var(--font-handwritten); text-decoration: none; }
 .portfolio-back:hover { color: #24aaa5; }
 .portfolio-tabs { display: flex; justify-content: center; align-items: center; gap: 24px; }
-.portfolio-tabs a { padding: 8px 0; color: #9ca596; font: 600 clamp(22px, 4vw, 28px)/1.5 "Segoe Print", "Bradley Hand", "Chalkboard SE", cursive; text-decoration: none; transition: color 180ms ease; }
+.portfolio-tabs a { padding: 8px 0; color: #9ca596; font: 600 clamp(22px, 4vw, 28px)/1.5 var(--font-handwritten); text-decoration: none; transition: color 180ms ease; }
 .portfolio-tabs a:hover, .portfolio-tabs a[aria-current="page"] { color: #3f5d5c; }
 .portfolio-tab-dot { color: #95a99c; font-size: 24px; }
 .portfolio-panel { width: min(660px, 100%); margin: 96px auto 0; }
 .experience-timeline { margin: 0; padding: 0; list-style: none; }
 .experience-entry { position: relative; display: grid; grid-template-columns: 110px 24px minmax(0, 1fr); column-gap: 26px; padding-bottom: 110px; }
 .experience-entry::before { content: ""; position: absolute; top: 13px; bottom: 0; left: 147px; width: 1px; background: linear-gradient(#95afa28c, #95afa200); }
-.experience-entry time { padding-top: 3px; color: #839283; font: 13px/1.7 Arial, sans-serif; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+.experience-entry time { padding-top: 3px; color: #839283; font: 13px/1.7 var(--font-handwritten); letter-spacing: 1px; font-variant-numeric: tabular-nums; }
 .experience-dot { z-index: 1; justify-self: center; width: 9px; height: 9px; margin-top: 10px; border-radius: 50%; background: #78988a; box-shadow: 0 0 0 6px #78988a12; }
-.experience-kind { margin: 0 0 12px; color: #839283; font: 12px/1.8 Arial, "Microsoft YaHei", sans-serif; letter-spacing: 2px; }
-.experience-content h1 { margin: 0; font: 500 clamp(23px, 5vw, 30px)/1.5 Arial, "Microsoft YaHei", sans-serif; letter-spacing: 2px; }
-.experience-major { margin: 12px 0 0; color: #75867b; font: 14px/1.8 Arial, "Microsoft YaHei", sans-serif; letter-spacing: 1px; }
+.experience-kind { margin: 0 0 12px; color: #839283; font: 12px/1.8 var(--font-handwritten); letter-spacing: 2px; }
+.experience-content h1 { margin: 0; font: 500 clamp(23px, 5vw, 30px)/1.5 var(--font-handwritten); letter-spacing: 2px; }
+.experience-major { margin: 12px 0 0; color: #75867b; font: 14px/1.8 var(--font-handwritten); letter-spacing: 1px; }
 @media (max-width: 1050px) {
   .greeting-home > .portfolio-card { position: static; grid-column: 1; grid-row: 5; justify-self: center; width: min(280px, 100%); margin-top: 16px; padding: 20px 24px; }
   .greeting-home > .like-dock { grid-row: 6; }
