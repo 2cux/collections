@@ -16,7 +16,7 @@ export function projectEye(side, yaw, pitch) {
   };
 }
 
-export function mountCharacter({ cardButton, card, scene, backButton, artHost }) {
+export function mountCharacter({ cardButton, card, scene, backButton, artHost, pageTransition }) {
   artHost.innerHTML = CHARACTER_ART;
   const viewBox = artHost.querySelector('svg').viewBox.baseVal;
   artHost.parentElement.style.setProperty('--character-aspect', `${viewBox.width} / ${viewBox.height}`);
@@ -28,6 +28,7 @@ export function mountCharacter({ cardButton, card, scene, backButton, artHost })
   let blinkTimer = null, blinkStart = null;
   let x = 0, y = 0, vx = 0, vy = 0, targetX = 0, targetY = 0;
   let stageBounds;
+  let homeScroll = 0;
   const cleanups = [];
   const on = (target, event, handler) => {
     target.addEventListener(event, handler);
@@ -103,25 +104,35 @@ export function mountCharacter({ cardButton, card, scene, backButton, artHost })
 
   function open() {
     if (active || disposed || !document.querySelector('#intro').hidden) return;
-    active = true;
-    card.hidden = true; scene.hidden = false;
-    document.querySelector('main').dataset.view = 'character';
-    measure(); resetGaze(); queueBlink();
-    scene.focus({ preventScroll: true });
+    pageTransition.run(() => {
+      homeScroll = window.scrollY;
+      active = true;
+      card.hidden = true; scene.hidden = false;
+      document.querySelector('main').dataset.view = 'character';
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      measure(); resetGaze(); queueBlink();
+      scene.focus({ preventScroll: true });
+    });
   }
 
   function close() {
     if (!active) return;
+    pageTransition.run(closeView, { reverse: true });
+  }
+
+  function closeView() {
     active = false; stop();
     scene.hidden = true; card.hidden = false;
     document.querySelector('main').dataset.view = 'greeting';
     x = y = vx = vy = targetX = targetY = 0; paint();
+    window.scrollTo({ top: homeScroll, behavior: 'instant' });
     cardButton.focus({ preventScroll: true });
   }
 
   function pointer(event) {
     if (!active || !stageBounds) return;
     // The supplied portrait's face center in the padded SVG viewBox.
+    measure();
     const cx = stageBounds.left + stageBounds.width * ((700 - viewBox.x) / viewBox.width);
     const cy = stageBounds.top + stageBounds.height * ((737 - viewBox.y) / viewBox.height);
     // Reach the same gaze range with a smaller pointer movement.

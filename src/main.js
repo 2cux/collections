@@ -7,8 +7,10 @@ import { mountClock } from "./clock.js";
 import { mountCalendar } from "./calendar.jsx";
 import { mountPortfolio } from "./portfolio.js";
 import { mountMusic } from "./music.js";
+import { createPageTransition } from "./page-transition.js";
+const pageTransition = createPageTransition(document.querySelector('main'));
 const unmountMusic = mountMusic();
-const unmountPortfolio = mountPortfolio();
+const unmountPortfolio = mountPortfolio(pageTransition);
 const unmountClock = mountClock();
 const unmountCalendar = mountCalendar();
 const unmountActivity = mountActivity();
@@ -31,6 +33,7 @@ const unmountCharacter = mountCharacter({
   scene: document.querySelector('#character-page'),
   backButton: document.querySelector('#back-to-greeting'),
   artHost: document.querySelector('#character-art-host'),
+  pageTransition,
 });
 const emailButton = document.querySelector('#copy-qq-email');
 const contactToast = document.querySelector('#contact-toast');
@@ -81,6 +84,7 @@ async function copyQQEmail() {
 emailButton.addEventListener('click', copyQQEmail);
 function dispose() {
   disposed = true;
+  pageTransition.dispose();
   emailButton.removeEventListener('click', copyQQEmail);
   window.clearTimeout(toastTimer);
   contactToast.classList.remove('is-visible');

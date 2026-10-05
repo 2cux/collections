@@ -1,4 +1,4 @@
-export function mountPortfolio() {
+export function mountPortfolio(pageTransition) {
   const home = document.querySelector('.greeting-home');
   const launcher = document.querySelector('#open-portfolio');
   const page = document.querySelector('#portfolio-page');
@@ -7,7 +7,7 @@ export function mountPortfolio() {
   let homeScroll = 0;
 
 
-  function navigate() {
+  function updateView() {
     const section = window.location.hash.slice(1);
     if (section === 'project' || section === 'experience') {
       const opening = page.hidden;
@@ -36,6 +36,11 @@ export function mountPortfolio() {
       launcher.focus({ preventScroll: true });
     }
   }
+  function navigate() {
+    pageTransition.run(updateView, {
+      reverse: !['project', 'experience'].includes(window.location.hash.slice(1)),
+    });
+  }
   function escape(event) {
     if (event.key === 'Escape' && !page.hidden) {
       event.preventDefault();
@@ -44,7 +49,7 @@ export function mountPortfolio() {
   }
   window.addEventListener('hashchange', navigate);
   document.addEventListener('keydown', escape);
-  navigate();
+  pageTransition.run(updateView, { immediate: true });
   return () => {
     window.removeEventListener('hashchange', navigate);
     document.removeEventListener('keydown', escape);

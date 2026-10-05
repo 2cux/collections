@@ -122,7 +122,6 @@ button { -webkit-tap-highlight-color: transparent; }
   outline: none;
   padding: 54px 0 20px;
   color: #3f5d5c;
-  animation: character-arrive 650ms cubic-bezier(.22, 1, .36, 1) both;
 }
 .character-back { position: absolute; top: 10px; left: max(0px, calc((100% - 1040px) / 2)); display: flex; align-items: center; gap: 9px; padding: 11px 18px; border: 1px solid #ffffffd9; border-radius: 999px; background: #ffffff80; box-shadow: 0 4px 15px #937d5808; color: #617368; font: 13px/1.2 var(--font-handwritten); cursor: pointer; transition: background 180ms ease, transform 180ms ease; }
 .character-back:hover { background: #ffffffd9; transform: translateX(-3px); }
@@ -142,7 +141,6 @@ button { -webkit-tap-highlight-color: transparent; }
 .character-star-two { top: 72%; left: -3%; font-size: 29px; color: #a1bb9c; }
 .character-hint { display: flex; align-items: center; gap: 8px; margin: 0; color: #7d8a7d; font: 12px/1.7 var(--font-handwritten); letter-spacing: .5px; }
 .character-hint-dot { width: 5px; height: 5px; background: #69ada0; border-radius: 50%; box-shadow: 0 0 0 4px #69ada010; }
-@keyframes character-arrive { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes character-breathe { 0%, 100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-4px) scaleY(1.008); } }
 @media (hover: hover) and (pointer: fine) {
   .greeting-card:hover .greeting-invitation span { transform: translate(2px, -2px); }
