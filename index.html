@@ -105,6 +105,13 @@
         <div class="character-stage">
           <div class="character-halo" aria-hidden="true"></div>
           <div id="character-art-host" class="character-art-host"></div>
+          <div class="character-greeting" role="status" aria-live="polite" aria-atomic="true">
+            <!-- Tail adapted from Cult UI Speech Bubble; license in src/components/character-greeting/SOURCE.md. -->
+            <svg class="character-greeting-tail" viewBox="0 0 53 45" aria-hidden="true" focusable="false">
+              <path d="M44 0H0V0C0 24.8528 20.1472 45 45 45H53V45C47.1396 36.535 44 26.4842 44 16.1886V0Z"/>
+            </svg>
+            <span class="character-greeting-text"></span>
+          </div>
           <span class="character-star character-star-one" aria-hidden="true">✦</span>
           <span class="character-star character-star-two" aria-hidden="true">✧</span>
         </div>

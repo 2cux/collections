@@ -1,0 +1,27 @@
+
+> cao-bo-portfolio-intro@0.1.0 dev
+> vite --host 127.0.0.1
+
+Port 5173 is in use, trying another one...
+
+  VITE v7.3.6  ready in 444 ms
+
+  ➜  Local:   http://127.0.0.1:5174/
+  ➜  press h + enter to show help
+09:45:17 [vite] (client) page reload index.html
+09:45:18 [vite] (client) page reload src/character.js
+09:45:18 [vite] (client) hmr update /src/styles.css
+09:49:21 [vite] (client) page reload index.html
+09:49:22 [vite] (client) page reload src/character.js
+09:49:23 [vite] (client) hmr update /src/styles.css
+09:51:03 [vite] (client) hmr update /src/styles.css
+09:52:38 [vite] (client) page reload index.html
+09:52:38 [vite] (client) page reload src/character.js
+09:52:39 [vite] (client) hmr update /src/styles.css
+09:53:59 [vite] (client) hmr update /src/styles.css
+09:55:15 [vite] (client) page reload src/character.js
+09:55:16 [vite] (client) page reload index.html
+09:55:16 [vite] (client) hmr update /src/styles.css
+09:57:27 [vite] (client) page reload src/character.js
+09:57:27 [vite] (client) page reload index.html
+09:57:28 [vite] (client) hmr update /src/styles.css
