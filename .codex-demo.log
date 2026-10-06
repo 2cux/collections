@@ -25,3 +25,10 @@ Port 5173 is in use, trying another one...
 09:57:27 [vite] (client) page reload src/character.js
 09:57:27 [vite] (client) page reload index.html
 09:57:28 [vite] (client) hmr update /src/styles.css
+10:07:18 [vite] (client) hmr update /src/styles.css
+10:07:30 [vite] (client) hmr update /src/styles.css
+10:07:52 [vite] (client) page reload src/activity.jsx
+10:07:52 [vite] (client) page reload index.html
+10:12:02 [vite] (client) page reload index.html
+10:12:02 [vite] (client) hmr update /src/styles.css
+10:12:16 [vite] (client) page reload src/intro.js

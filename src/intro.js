@@ -70,7 +70,7 @@ export function mountIntro({ intro, enterButton }) {
     document.activeElement?.blur();
     const minimal = reduceMotion();
     const easing = 'cubic-bezier(0.22, 1, 0.36, 1)';
-    const picture = intro.querySelector('.intro-video-frame');
+    const picture = intro.querySelector('.intro-content');
     const pictureAnimation = picture.animate(
       minimal
         ? [{ opacity: 1 }, { opacity: 0 }]

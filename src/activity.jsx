@@ -113,7 +113,7 @@ function GitHubActivity({ data, onRefresh, refreshing }) {
   </div>;
   if (!expanded) return <button ref={toggleRef} id="activity-toggle" className="activity-launcher" type="button" aria-expanded="false" aria-controls="activity-panel" onClick={() => toggle(true)}>
     <span className="activity-launcher-icon" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /><i /></span>
-    <h2 id="activity-title">Github Activity<br />Heatmap</h2>
+    <h2 id="activity-title">Github Activity <br />Heatmap</h2>
     <span className="activity-launcher-total">今年共 <strong>{annualTotal.toLocaleString('en-US')}</strong> 次贡献</span>
     <span className="activity-launcher-hint">展开活动日历 <span aria-hidden="true">↗</span></span>
   </button>;
