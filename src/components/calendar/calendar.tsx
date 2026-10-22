@@ -36,9 +36,11 @@ const isBefore = (a: Date, b?: Date) => Boolean(b && startOfDay(a).getTime() < s
 const isAfter = (a: Date, b?: Date) => Boolean(b && startOfDay(a).getTime() > startOfDay(b).getTime());
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const fromKey = (key: string) => { const [year, month, day] = key.split("-").map(Number); return new Date(year, month - 1, day); };
+// Columns run from Monday (0) through Sunday (6).
+const weekdayIndex = (date: Date) => (date.getDay() + 6) % 7;
 /** Every month shows six weeks, so the grid keeps one height and never jumps while months change. */
 const makeWeeks = (month: Date) => {
-  const start = addDays(month, -month.getDay());
+  const start = addDays(month, -weekdayIndex(month));
   return Array.from({ length: 6 }, (_, week) => Array.from({ length: 7 }, (_, day) => addDays(start, week * 7 + day)));
 };
 
@@ -176,7 +178,7 @@ export function Calendar({
   const paneIndexes = Array.from(new Set([span[0], span[1], target])).sort((a, b) => a - b);
   const formatter = useMemo(() => new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }), [locale]);
   const weekdayFormatter = useMemo(() => new Intl.DateTimeFormat(locale, { weekday: "short" }), [locale]);
-  const weekdays = useMemo(() => Array.from({ length: 7 }, (_, index) => weekdayFormatter.format(new Date(2024, 0, 7 + index))), [weekdayFormatter]);
+  const weekdays = useMemo(() => Array.from({ length: 7 }, (_, index) => weekdayFormatter.format(new Date(2024, 0, 8 + index))), [weekdayFormatter]);
   const monthLabel = month ? formatter.format(month) : "";
   // The selected disc glides between days, so each number flips color as the disc actually passes it:
   // the day it leaves waits longer on short hops, the day it lands on waits longer on long ones.
@@ -185,7 +187,7 @@ export function Calendar({
   const [handoff, setHandoff] = useState({ from: "", to: "", distance: 0 });
   if (last.key !== valueKey) {
     const days = last.date && value ? Math.round((startOfDay(value).getTime() - startOfDay(last.date).getTime()) / 864e5) : 0;
-    const columns = last.date && value ? value.getDay() - last.date.getDay() : 0;
+    const columns = last.date && value ? weekdayIndex(value) - weekdayIndex(last.date) : 0;
     setLast({ key: valueKey, date: value });
     setHandoff({ from: last.key, to: valueKey, distance: Math.hypot(columns, (days - columns) / 7) });
   }
@@ -244,8 +246,8 @@ export function Calendar({
       ArrowRight: [addDays(date, 1), 1],
       ArrowUp: [addDays(date, -7), -1],
       ArrowDown: [addDays(date, 7), 1],
-      Home: [addDays(date, -date.getDay()), 1],
-      End: [addDays(date, 6 - date.getDay()), -1],
+      Home: [addDays(date, -weekdayIndex(date)), 1],
+      End: [addDays(date, 6 - weekdayIndex(date)), -1],
       PageUp: [shiftMonths(date, event.shiftKey ? -12 : -1), -1],
       PageDown: [shiftMonths(date, event.shiftKey ? 12 : 1), 1],
     };
@@ -266,7 +268,7 @@ export function Calendar({
   // Six fixed weeks per month, so a day's cell is its distance from the first day on the grid.
   const cellOf = (paneMonth: Date) => {
     if (!value) return -1;
-    const first = addDays(paneMonth, -paneMonth.getDay());
+    const first = addDays(paneMonth, -weekdayIndex(paneMonth));
     const index = Math.round((startOfDay(value).getTime() - first.getTime()) / 864e5);
     return index >= 0 && index < 42 ? index : -1;
   };
