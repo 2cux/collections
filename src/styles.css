@@ -727,20 +727,23 @@ body { overflow-y: auto; }
   .card:hover { transform: translateY(-4px); }
   .greeting-home > .activity-card:not([data-animating]):hover { translate: 0 -4px; scale: 1; }
 }
-/* Narrow screens use one reading column and a separate contact/action row.
-   Explicitly clear the offsets inherited from the desktop floating docks. */
+/* Keep the same first three rows while the activity card expands in place. */
 @media (max-width: 1050px) {
+  html, body { min-width: 0; }
+  /* Keep the column width when the expanded page no longer needs a scrollbar. */
+  html:not(.is-intro-active):has(.greeting-home:not([hidden])) { scrollbar-gutter: stable; }
   .welcome-page {
+    --page-gutter: clamp(14px, 4vw, 22px);
     min-height: 0;
-    padding: max(24px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 28px max(18px, env(safe-area-inset-left));
+    padding: max(18px, env(safe-area-inset-top)) max(var(--page-gutter), env(safe-area-inset-right)) 24px max(var(--page-gutter), env(safe-area-inset-left));
     align-items: start;
   }
   .greeting-home:not(.is-activity-expanded),
   .greeting-home.is-activity-expanded {
     width: min(520px, 100%);
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto auto auto auto auto;
-    gap: 16px 12px;
+    grid-template-rows: none;
+    gap: 12px;
     align-items: stretch;
     margin: 0;
   }
@@ -750,17 +753,39 @@ body { overflow-y: auto; }
     grid-row: 1;
     width: 100% !important;
     min-height: 0;
-    padding: 30px 20px 26px;
+    padding: clamp(18px, 5vw, 26px);
     border-radius: 28px;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px clamp(12px, 3vw, 18px);
     align-items: center;
-    justify-content: center;
+    text-align: left;
   }
-  .greeting-home.greeting-home .greeting-avatar { width: 96px; height: 96px; margin-bottom: 18px; }
-  .greeting-home.greeting-home .greeting-title { margin-bottom: 10px; font-size: clamp(22px, 5.8vw, 27px); line-height: 1.45; }
-  .greeting-home.greeting-home .greeting-message { font-size: clamp(20px, 5.4vw, 24px); line-height: 1.6; }
-  .greeting-home.greeting-home .greeting-invitation { margin-top: 18px; font-size: 12px; }
+  .greeting-home .greeting-card .greeting-avatar {
+    grid-column: 2;
+    grid-row: 1 / 4;
+    width: clamp(62px, 21vw, 108px);
+    height: auto;
+    aspect-ratio: 1;
+    margin: 0;
+  }
+  .greeting-home .greeting-card .greeting-title {
+    grid-column: 1;
+    margin: 0;
+    font-size: clamp(18px, 5.3vw, 26px);
+    line-height: 1.35;
+  }
+  .greeting-home .greeting-card .greeting-message {
+    grid-column: 1;
+    font-size: clamp(15px, 4.3vw, 21px);
+    line-height: 1.5;
+  }
+  .greeting-home .greeting-message br { display: none; }
+  .greeting-home .greeting-card .greeting-invitation {
+    grid-column: 1;
+    margin-top: 5px;
+    font-size: 11px;
+  }
   .greeting-home:not(.is-activity-expanded) > .greeting-links,
   .greeting-home.is-activity-expanded > .greeting-links {
     grid-column: 1;
@@ -768,10 +793,8 @@ body { overflow-y: auto; }
     justify-self: start;
     align-self: start;
     margin: 0;
-    padding: 4px 0;
-    gap: 12px;
+    gap: 8px;
   }
-  .greeting-link { width: 48px; height: 48px; }
   .greeting-home:not(.is-activity-expanded) > .like-dock,
   .greeting-home.is-activity-expanded > .like-dock {
     position: static;
@@ -781,11 +804,11 @@ body { overflow-y: auto; }
     justify-self: end;
     align-self: start;
     width: 112px;
-    margin: 4px 0 0;
-    gap: 4px;
+    margin: 0;
+    gap: 3px;
   }
   .greeting-home .like-button { height: 48px; }
-  .greeting-home.greeting-home .like-status { position: static; font-size: 9px; line-height: 1.5; }
+  .greeting-home .like-dock .like-status { position: static; font-size: 9px; line-height: 1.5; }
   .greeting-home:not(.is-activity-expanded) > .activity-card,
   .greeting-home.is-activity-expanded > .activity-card {
     position: relative;
@@ -799,51 +822,94 @@ body { overflow-y: auto; }
     border-radius: 24px;
     justify-self: stretch;
   }
-  .greeting-home.is-activity-expanded > .activity-card { padding: 24px 18px; }
-  .greeting-home:not(.is-activity-expanded) > .portfolio-card {
+  .greeting-home.is-activity-expanded > .activity-card {
+    --space-3: 8px;
+    --space-4: 14px;
+    padding: 16px clamp(12px, 4vw, 20px);
+  }
+
+  /* Keep the outgoing cards in their compact layout during the existing fade. */
+  .greeting-home:not(.is-activity-expanded) > .portfolio-card,
+  .greeting-home > .portfolio-card[data-exiting] {
     grid-column: 1 / -1;
     grid-row: 4;
     width: 100%;
     height: auto;
     min-height: 0;
     margin: 0;
-    padding: 22px;
     border-radius: 24px;
   }
   .greeting-home .activity-launcher,
-  .greeting-home:not(.is-activity-expanded) > .portfolio-card {
+  .greeting-home:not(.is-activity-expanded) > .portfolio-card,
+  .greeting-home > .portfolio-card[data-exiting] {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr);
-    column-gap: 16px;
-    row-gap: 4px;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 2px 12px;
     align-items: center;
+    padding: 13px 36px 13px 15px;
     text-align: left;
   }
-  .greeting-home .activity-launcher { min-height: 0; height: auto; padding: 22px; }
-  .activity-launcher-icon, .portfolio-icon { grid-column: 1; grid-row: 1 / 3; align-self: start; margin-top: 5px; }
+  .greeting-home > .portfolio-card[data-exiting] { display: grid !important; }
+  .greeting-home .activity-launcher { position: relative; height: auto; }
+  .activity-launcher-icon, .portfolio-icon { grid-column: 1; grid-row: 1 / 4; justify-self: center; }
   .greeting-home .activity-launcher h2,
-  .greeting-home .portfolio-card h2 { grid-column: 2; margin: 0; font-size: 18px; line-height: 1.5; }
+  .greeting-home .portfolio-card h2 { grid-column: 2; margin: 0; font-size: clamp(15px, 4.2vw, 18px); line-height: 1.45; }
   .activity-launcher h2 br, .portfolio-card h2 br { display: none; }
   .greeting-home .activity-launcher-total,
-  .greeting-home .portfolio-card-caption { grid-column: 2; font-size: 12px; line-height: 1.7; }
+  .greeting-home .portfolio-card-caption { grid-column: 2; font-size: 12px; line-height: 1.5; }
   .greeting-home .activity-launcher-hint,
-  .greeting-home .portfolio-card-hint { grid-column: 2; margin: 6px 0 0; padding: 0; font-size: 11px; }
-  .greeting-home:not(.is-activity-expanded) > .greeting-companion {
+  .greeting-home .portfolio-card-hint { grid-column: 2; margin: 0; padding: 0; font-size: 11px; }
+  .activity-launcher-hint span, .portfolio-card-hint span {
+    position: absolute;
+    inset-inline-end: 15px;
+    inset-block-start: calc(50% - .5em);
+    line-height: 1;
+  }
+  .greeting-home:not(.is-activity-expanded) > .greeting-companion,
+  .greeting-home > .greeting-companion[data-exiting] {
     position: static;
     inset: auto;
     grid-column: 1 / -1;
     grid-row: 5;
     width: 100%;
-    margin: 8px 0 0;
-    gap: 16px;
+    margin: 4px 0 0;
+    gap: 12px;
   }
-  .clock-card { padding: 20px 22px; border-radius: 24px; }
-  .clock-time { font-size: 38px; margin-top: 10px; }
-  .clock-date { font-size: 11px; margin-top: 8px; }
-  .calendar-card { flex: none; justify-items: center; padding: 22px 18px; border-radius: 24px; }
-  .activity-header { align-items: start; gap: 10px; }
-  .activity-header h2 { font-size: 18px; }
-  .activity-collapse { flex-shrink: 0; }
+  .clock-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 6px 10px;
+    padding: 14px 16px;
+    border-radius: 24px;
+  }
+  .clock-heading { grid-column: 1 / -1; }
+  .clock-time { font-size: clamp(27px, 8vw, 38px); margin: 0; }
+  .clock-seconds { margin-left: 6px; font-size: .5em; }
+  .clock-date { margin: 0; font-size: 11px; text-align: right; }
+  .calendar-card { flex: none; justify-items: center; padding: 14px clamp(10px, 3vw, 18px); border-radius: 24px; }
+
+  .activity-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .activity-header h2 { margin-top: 3px; font-size: clamp(16px, 4.5vw, 20px); line-height: 1.4; }
+  .activity-component { min-height: 0; }
+  .activity-range button, .activity-collapse, .activity-refresh { min-height: 44px; }
+  .activity-range button { min-width: 44px; }
+  .activity-bottom {
+    display: grid;
+    grid-template-areas: 'profile refresh' 'sync sync';
+    gap: 4px 12px;
+    padding-top: 8px;
+    margin-top: 14px;
+  }
+  .activity-note { grid-area: profile; justify-self: start; display: inline-flex; align-items: center; min-height: 44px; }
+  .activity-refresh { grid-area: refresh; justify-self: end; }
+  .activity-sync { grid-area: sync; font-size: 10px; }
   .music-toggle {
     position: relative;
     inset: auto;
